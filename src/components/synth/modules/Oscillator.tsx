@@ -6,44 +6,30 @@ import { Knob } from "../Knob";
 import { engine, type Waveform } from "@/audio/engine";
 
 const WAVEFORMS: Waveform[] = ["sine", "triangle", "sawtooth", "square"];
-const MIN_FREQ = 30;
-const MAX_FREQ = 2000;
 
-// Knob sweeps logarithmically across the audible range — feels musical.
-const knobToFreq = (v: number): number =>
-  MIN_FREQ * Math.pow(MAX_FREQ / MIN_FREQ, v);
-const freqToKnob = (f: number): number =>
-  Math.log(f / MIN_FREQ) / Math.log(MAX_FREQ / MIN_FREQ);
+const TUNE_RANGE_ST = 12; // ±12 semitones across the knob
+// Knob 0..1 → semitones in [-TUNE_RANGE_ST, +TUNE_RANGE_ST], with 0.5 == 0.
+const knobToSemitones = (v: number): number => (v - 0.5) * 2 * TUNE_RANGE_ST;
+const formatSemitones = (st: number): string =>
+  `${st >= 0 ? "+" : ""}${st.toFixed(1)} st`;
 
-type Props = {
-  powered: boolean;
-};
+type Props = { powered: boolean };
 
 export function Oscillator({ powered }: Props) {
-  const [freqKnob, setFreqKnob] = useState(() => freqToKnob(220)); // A3
-  const [level, setLevel] = useState(0);
+  const [tuneKnob, setTuneKnob] = useState(0.5); // centered = 0 semitones
   const [waveform, setWaveform] = useState<Waveform>("sine");
 
-  // When power flips on, push the current UI state into the freshly-init'd
-  // engine so we don't have a silent moment where the engine has defaults
-  // that don't match the visible knobs.
+  // Sync UI → engine on power-on (so engine matches what the knobs say).
   useEffect(() => {
     if (!powered) return;
-    engine.setFrequency(knobToFreq(freqKnob));
-    engine.setLevel(level);
+    engine.setTuneSemitones(knobToSemitones(tuneKnob));
     engine.setWaveform(waveform);
-    // intentionally only on `powered` flipping — see per-control effects below
-    // for live updates after that.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [powered]);
 
   useEffect(() => {
-    if (powered) engine.setFrequency(knobToFreq(freqKnob));
-  }, [freqKnob, powered]);
-
-  useEffect(() => {
-    if (powered) engine.setLevel(level);
-  }, [level, powered]);
+    if (powered) engine.setTuneSemitones(knobToSemitones(tuneKnob));
+  }, [tuneKnob, powered]);
 
   useEffect(() => {
     if (powered) engine.setWaveform(waveform);
@@ -52,20 +38,10 @@ export function Oscillator({ powered }: Props) {
   return (
     <Module title="VCO 01" hp={10}>
       <Knob
-        label="freq"
-        value={freqKnob}
-        onChange={setFreqKnob}
-        format={(v) => {
-          const hz = knobToFreq(v);
-          return hz < 100 ? `${hz.toFixed(1)} Hz` : `${Math.round(hz)} Hz`;
-        }}
-      />
-
-      <Knob
-        label="level"
-        value={level}
-        onChange={setLevel}
-        format={(v) => v.toFixed(2)}
+        label="tune"
+        value={tuneKnob}
+        onChange={setTuneKnob}
+        format={(v) => formatSemitones(knobToSemitones(v))}
       />
 
       <div className="flex flex-col gap-1 w-full pt-2">
