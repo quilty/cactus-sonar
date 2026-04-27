@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" shape-rendering="crispEdges">
+  <!-- Trunk: shadow / body / highlight columns for depth -->
+  <rect x="13" y="3" width="2" height="25" fill="#4ade80"/>
+  <rect x="15" y="3" width="2" height="25" fill="#22c55e"/>
+  <rect x="17" y="3" width="2" height="25" fill="#15803d"/>
+
+  <!-- Left arm (lower) -->
+  <rect x="4" y="13" width="2" height="9" fill="#4ade80"/>
+  <rect x="6" y="13" width="2" height="9" fill="#22c55e"/>
+  <rect x="8" y="13" width="2" height="9" fill="#15803d"/>
+  <rect x="10" y="13" width="3" height="2" fill="#22c55e"/>
+  <rect x="10" y="11" width="3" height="2" fill="#15803d"/>
+
+  <!-- Right arm (higher) -->
+  <rect x="22" y="9" width="2" height="11" fill="#4ade80"/>
+  <rect x="24" y="9" width="2" height="11" fill="#22c55e"/>
+  <rect x="26" y="9" width="2" height="11" fill="#15803d"/>
+  <rect x="19" y="9" width="3" height="2" fill="#22c55e"/>
+  <rect x="19" y="7" width="3" height="2" fill="#15803d"/>
+
+  <!-- Trunk rib markers -->
+  <rect x="14" y="8" width="4" height="1" fill="#15803d" opacity="0.7"/>
+  <rect x="14" y="14" width="4" height="1" fill="#15803d" opacity="0.7"/>
+  <rect x="14" y="20" width="4" height="1" fill="#15803d" opacity="0.7"/>
+  <rect x="14" y="26" width="4" height="1" fill="#15803d" opacity="0.7"/>
+
+  <!-- Soil -->
+  <rect x="11" y="28" width="10" height="2" fill="#78350f"/>
+  <rect x="11" y="28" width="10" height="1" fill="#a16207"/>
+</svg>

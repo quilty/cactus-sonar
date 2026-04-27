@@ -5,6 +5,8 @@ type ModuleProps = {
   title: string;
   /** Eurorack horizontal pitch units. 1 HP ≈ 5.08mm IRL. We use it as a width hint. */
   hp?: number;
+  /** Minimum panel height. Standard 3U is the default. */
+  minHeight?: number;
   children: ReactNode;
 };
 
@@ -14,11 +16,11 @@ const HP_TO_PX = 22;
  * Eurorack-style faceplate. Children render in a single column, centered.
  * Server-rendered: this component has no interactivity of its own.
  */
-export function Module({ title, hp = 8, children }: ModuleProps) {
+export function Module({ title, hp = 8, minHeight = 380, children }: ModuleProps) {
   return (
     <section
       className="relative shrink-0 rounded-md border border-zinc-700/60 bg-gradient-to-b from-zinc-800 to-zinc-900 shadow-lg shadow-black/50"
-      style={{ width: hp * HP_TO_PX, minHeight: 380 }}
+      style={{ width: hp * HP_TO_PX, minHeight }}
     >
       <Screw className="top-1.5 left-1.5" />
       <Screw className="top-1.5 right-1.5" />

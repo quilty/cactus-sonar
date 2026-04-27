@@ -5,6 +5,7 @@ import { engine } from "@/audio/engine";
 import { PowerButton } from "./PowerButton";
 import { Oscillator } from "./modules/Oscillator";
 import { Envelope } from "./modules/Envelope";
+import { Scope } from "./modules/Scope";
 import { Keyboard } from "./Keyboard";
 
 export function Rack() {
@@ -37,6 +38,7 @@ export function Rack() {
       <RackFrame>
         <Oscillator powered={powered} />
         <Envelope powered={powered} />
+        <Scope powered={powered} />
       </RackFrame>
 
       <Keyboard powered={powered} />

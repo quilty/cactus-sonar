@@ -26,6 +26,8 @@ class AudioEngine {
   private oscillator: Tone.Oscillator | null = null;
   private envelope: Tone.AmplitudeEnvelope | null = null;
   private masterGain: Tone.Gain | null = null;
+  /** Parallel tap on the master output for visualization. Doesn't affect audio. */
+  private waveform: Tone.Waveform | null = null;
   private started = false;
 
   /** Held notes, ordered. Last element is the currently-sounding pitch. */
@@ -54,7 +56,18 @@ class AudioEngine {
     }).connect(this.envelope);
     this.oscillator.start();
 
+    // Scope tap: parallel branch off masterGain, doesn't disrupt audio path.
+    this.waveform = new Tone.Waveform(1024);
+    this.masterGain.connect(this.waveform);
+
     this.started = true;
+  }
+
+  /** Latest time-domain samples [-1..1], or null before init. */
+  getWaveform(): Float32Array | null {
+    if (!this.waveform) return null;
+    // Tone returns its own array type that's array-like; cast for the consumer.
+    return this.waveform.getValue() as unknown as Float32Array;
   }
 
   isStarted(): boolean {
