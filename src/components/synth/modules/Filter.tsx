@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { Module } from "../Module";
 import { Knob } from "../Knob";
 import { engine, type FilterType } from "@/audio/engine";
+import { usePreset } from "@/state/preset";
 
 const FILTER_TYPES: FilterType[] = ["lowpass", "highpass", "bandpass"];
 const TYPE_LABEL: Record<FilterType, string> = {
@@ -28,9 +29,9 @@ const formatHz = (hz: number): string =>
 type Props = { powered: boolean };
 
 export function Filter({ powered }: Props) {
-  const [cutoff, setCutoff] = useState(() => cutoffToKnob(2000));
-  const [reso, setReso] = useState(0.05);
-  const [type, setType] = useState<FilterType>("lowpass");
+  const [cutoff, setCutoff] = usePreset("vcf.cutoff", cutoffToKnob(2000));
+  const [reso, setReso] = usePreset("vcf.reso", 0.05);
+  const [type, setType] = usePreset<FilterType>("vcf.type", "lowpass");
 
   useEffect(() => {
     if (!powered) return;
@@ -51,7 +52,7 @@ export function Filter({ powered }: Props) {
   }, [type, powered]);
 
   return (
-    <Module title="VCF 01" hp={12}>
+    <Module title="VCF 01" hp={12} accent="var(--vcf-accent)">
       <Knob
         label="cutoff"
         value={cutoff}
@@ -74,11 +75,20 @@ export function Filter({ powered }: Props) {
             <button
               key={t}
               onClick={() => setType(t)}
-              className={`text-[10px] uppercase tracking-wider rounded px-1 py-1 border transition-colors ${
+              className="text-[10px] uppercase tracking-wider rounded px-1 py-1 border transition-colors"
+              style={
                 type === t
-                  ? "border-amber-400/60 bg-amber-400/10 text-amber-200"
-                  : "border-zinc-700 bg-zinc-900 text-zinc-400 hover:bg-zinc-800"
-              }`}
+                  ? {
+                      borderColor: "var(--accent)",
+                      background: "color-mix(in srgb, var(--accent) 12%, transparent)",
+                      color: "var(--accent)",
+                    }
+                  : {
+                      borderColor: "#3f3f46",
+                      background: "#18121f",
+                      color: "#a1a1aa",
+                    }
+              }
             >
               {TYPE_LABEL[t]}
             </button>

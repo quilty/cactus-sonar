@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { Module } from "../Module";
 import { Knob } from "../Knob";
 import { engine } from "@/audio/engine";
+import { usePreset } from "@/state/preset";
 
 // Time knobs are logarithmic across a [minMs, maxMs] window.
 // Returns seconds (Tone.js param unit).
@@ -25,10 +26,10 @@ const formatTime = (s: number): string =>
 type Props = { powered: boolean };
 
 export function Envelope({ powered }: Props) {
-  const [a, setA] = useState(() => timeToKnob(0.005, ATK_MIN, ATK_MAX));
-  const [d, setD] = useState(() => timeToKnob(0.2, DEC_MIN, DEC_MAX));
-  const [s, setS] = useState(0.7);
-  const [r, setR] = useState(() => timeToKnob(0.4, REL_MIN, REL_MAX));
+  const [a, setA] = usePreset("env.a", timeToKnob(0.005, ATK_MIN, ATK_MAX));
+  const [d, setD] = usePreset("env.d", timeToKnob(0.2, DEC_MIN, DEC_MAX));
+  const [s, setS] = usePreset("env.s", 0.7);
+  const [r, setR] = usePreset("env.r", timeToKnob(0.4, REL_MIN, REL_MAX));
 
   // Sync on power-on.
   useEffect(() => {
@@ -54,7 +55,7 @@ export function Envelope({ powered }: Props) {
   }, [r, powered]);
 
   return (
-    <Module title="ENV 01" hp={12}>
+    <Module title="ENV 01" hp={12} accent="var(--env-accent)">
       <div className="grid grid-cols-2 gap-3 mt-1">
         <Knob
           label="atk"

@@ -39,7 +39,7 @@ export function Scope({ powered }: Props) {
   }, []);
 
   return (
-    <Module title="SCOPE" hp={16}>
+    <Module title="SCOPE" hp={16} accent="var(--scope-accent)">
       <div className="rounded-sm bg-black border border-zinc-800/80 overflow-hidden shadow-inner shadow-black/80">
         <svg
           viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
@@ -65,23 +65,33 @@ export function Scope({ powered }: Props) {
             stroke="#1f2937"
             strokeWidth="1"
           />
-          {/* trace */}
+          {/* trace — uses module accent via CSS var */}
           <path
             ref={pathRef}
             fill="none"
-            stroke="#fbbf24"
+            stroke="var(--accent, #c084fc)"
             strokeWidth="1.4"
             strokeLinejoin="round"
-            style={{ filter: "drop-shadow(0 0 2px rgba(251,191,36,0.65))" }}
+            style={{
+              filter:
+                "drop-shadow(0 0 2px color-mix(in srgb, var(--accent, #c084fc) 65%, transparent))",
+            }}
           />
         </svg>
       </div>
 
       <div className="mt-2 flex items-center gap-2">
         <span
-          className={`h-1.5 w-1.5 rounded-full ${
-            powered ? "bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.8)]" : "bg-zinc-700"
-          }`}
+          className="h-1.5 w-1.5 rounded-full"
+          style={
+            powered
+              ? {
+                  background: "var(--accent)",
+                  boxShadow:
+                    "0 0 6px color-mix(in srgb, var(--accent) 70%, transparent)",
+                }
+              : { background: "#3f3f46" }
+          }
         />
         <span className="text-[9px] uppercase tracking-[0.2em] text-zinc-500 font-mono">
           {powered ? "live · 1024 sa" : "no signal"}

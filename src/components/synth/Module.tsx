@@ -3,24 +3,36 @@ import type { ReactNode } from "react";
 type ModuleProps = {
   /** Title engraved at the top of the panel. */
   title: string;
-  /** Eurorack horizontal pitch units. 1 HP ≈ 5.08mm IRL. We use it as a width hint. */
+  /** Eurorack horizontal pitch units. */
   hp?: number;
-  /** Minimum panel height. Standard 3U is the default. */
+  /** Minimum panel height. */
   minHeight?: number;
+  /**
+   * Module accent color (CSS color string). Children can reference it as
+   * `var(--accent)`. Defaults to gold to match envelope-style modules.
+   */
+  accent?: string;
   children: ReactNode;
 };
 
 const HP_TO_PX = 22;
 
-/**
- * Eurorack-style faceplate. Children render in a single column, centered.
- * Server-rendered: this component has no interactivity of its own.
- */
-export function Module({ title, hp = 8, minHeight = 380, children }: ModuleProps) {
+export function Module({
+  title,
+  hp = 8,
+  minHeight = 380,
+  accent = "var(--env-accent)",
+  children,
+}: ModuleProps) {
   return (
     <section
-      className="relative shrink-0 rounded-md border border-zinc-700/60 bg-gradient-to-b from-zinc-800 to-zinc-900 shadow-lg shadow-black/50"
-      style={{ width: hp * HP_TO_PX, minHeight }}
+      className="relative shrink-0 rounded-md border bg-gradient-to-b from-[#1a1530] to-[#0e0a1c] shadow-lg shadow-black/60"
+      style={{
+        width: hp * HP_TO_PX,
+        minHeight,
+        ["--accent" as string]: accent,
+        borderColor: `color-mix(in srgb, ${accent} 35%, #2a213f)`,
+      }}
     >
       <Screw className="top-1.5 left-1.5" />
       <Screw className="top-1.5 right-1.5" />
@@ -28,10 +40,24 @@ export function Module({ title, hp = 8, minHeight = 380, children }: ModuleProps
       <Screw className="bottom-1.5 right-1.5" />
 
       <header className="px-3 pt-5 pb-3 text-center">
-        <h2 className="text-[10px] font-semibold uppercase tracking-[0.25em] text-zinc-300">
+        <h2
+          className="font-pixel"
+          style={{
+            color: "var(--accent)",
+            fontSize: "9px",
+            letterSpacing: "0.1em",
+            textShadow: `0 0 6px color-mix(in srgb, var(--accent) 60%, transparent)`,
+          }}
+        >
           {title}
         </h2>
-        <div className="mt-1 mx-auto h-px w-8 bg-zinc-600/60" />
+        <div
+          className="mt-2 mx-auto h-px w-10"
+          style={{
+            background: `linear-gradient(90deg, transparent, var(--accent), transparent)`,
+            opacity: 0.6,
+          }}
+        />
       </header>
 
       <div className="px-3 pb-6 flex flex-col gap-4 items-center">

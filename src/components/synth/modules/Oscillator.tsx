@@ -1,14 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { Module } from "../Module";
 import { Knob } from "../Knob";
 import { engine, type Waveform } from "@/audio/engine";
+import { usePreset } from "@/state/preset";
 
 const WAVEFORMS: Waveform[] = ["sine", "triangle", "sawtooth", "square"];
 
 const TUNE_RANGE_ST = 12; // ±12 semitones across the knob
-// Knob 0..1 → semitones in [-TUNE_RANGE_ST, +TUNE_RANGE_ST], with 0.5 == 0.
 const knobToSemitones = (v: number): number => (v - 0.5) * 2 * TUNE_RANGE_ST;
 const formatSemitones = (st: number): string =>
   `${st >= 0 ? "+" : ""}${st.toFixed(1)} st`;
@@ -16,8 +16,8 @@ const formatSemitones = (st: number): string =>
 type Props = { powered: boolean };
 
 export function Oscillator({ powered }: Props) {
-  const [tuneKnob, setTuneKnob] = useState(0.5); // centered = 0 semitones
-  const [waveform, setWaveform] = useState<Waveform>("sine");
+  const [tuneKnob, setTuneKnob] = usePreset("vco.tune", 0.5);
+  const [waveform, setWaveform] = usePreset<Waveform>("vco.wave", "sine");
 
   // Sync UI → engine on power-on (so engine matches what the knobs say).
   useEffect(() => {
@@ -36,7 +36,7 @@ export function Oscillator({ powered }: Props) {
   }, [waveform, powered]);
 
   return (
-    <Module title="VCO 01" hp={10}>
+    <Module title="VCO 01" hp={10} accent="var(--vco-accent)">
       <Knob
         label="tune"
         value={tuneKnob}
@@ -53,11 +53,20 @@ export function Oscillator({ powered }: Props) {
             <button
               key={w}
               onClick={() => setWaveform(w)}
-              className={`text-[10px] uppercase tracking-wider rounded px-1 py-1 border transition-colors ${
+              className="text-[10px] uppercase tracking-wider rounded px-1 py-1 border transition-colors"
+              style={
                 waveform === w
-                  ? "border-amber-400/60 bg-amber-400/10 text-amber-200"
-                  : "border-zinc-700 bg-zinc-900 text-zinc-400 hover:bg-zinc-800"
-              }`}
+                  ? {
+                      borderColor: "var(--accent)",
+                      background: "color-mix(in srgb, var(--accent) 12%, transparent)",
+                      color: "var(--accent)",
+                    }
+                  : {
+                      borderColor: "#3f3f46",
+                      background: "#18121f",
+                      color: "#a1a1aa",
+                    }
+              }
             >
               {w}
             </button>

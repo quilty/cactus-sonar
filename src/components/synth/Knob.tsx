@@ -78,9 +78,15 @@ export function Knob({
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
         onDoubleClick={onDoubleClick}
-        style={{ width: size, height: size }}
-        className={`relative rounded-full bg-gradient-to-b from-zinc-700 to-zinc-900 shadow-inner ring-1 ring-black/40 touch-none ${
-          dragging ? "cursor-grabbing ring-amber-400/60" : "cursor-grab"
+        style={{
+          width: size,
+          height: size,
+          boxShadow: dragging
+            ? "0 0 0 1px var(--accent, #fbbf24), inset 0 2px 3px rgba(0,0,0,0.6)"
+            : "inset 0 2px 3px rgba(0,0,0,0.6), 0 1px 0 rgba(255,255,255,0.05)",
+        }}
+        className={`relative rounded-full bg-gradient-to-b from-[#2a2440] to-[#13101e] touch-none ${
+          dragging ? "cursor-grabbing" : "cursor-grab"
         }`}
       >
         {/* Indicator line; rotates with value. */}
@@ -88,7 +94,14 @@ export function Knob({
           className="absolute inset-0 pointer-events-none"
           style={{ transform: `rotate(${angle}deg)` }}
         >
-          <div className="absolute left-1/2 top-1.5 -translate-x-1/2 h-[35%] w-[3px] rounded-full bg-amber-300/90" />
+          <div
+            className="absolute left-1/2 top-1.5 -translate-x-1/2 h-[35%] w-[3px] rounded-full"
+            style={{
+              background: "var(--accent, #fbbf24)",
+              boxShadow:
+                "0 0 4px color-mix(in srgb, var(--accent, #fbbf24) 60%, transparent)",
+            }}
+          />
         </div>
       </div>
       <div className="text-[10px] uppercase tracking-[0.15em] text-zinc-400">

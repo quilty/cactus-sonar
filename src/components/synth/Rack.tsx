@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { engine } from "@/audio/engine";
 import { PowerButton } from "./PowerButton";
+import { Pet } from "./Pet";
+import { PresetBar } from "./PresetBar";
 import { Oscillator } from "./modules/Oscillator";
 import { Filter } from "./modules/Filter";
 import { Envelope } from "./modules/Envelope";
@@ -20,22 +22,41 @@ export function Rack() {
   };
 
   return (
-    <div className="min-h-screen w-full bg-zinc-950 text-zinc-200 flex flex-col items-center py-12 gap-8 overflow-x-hidden">
-      <header className="flex flex-col items-center gap-1">
-        <h1 className="text-2xl font-light tracking-[0.4em] text-zinc-300">
-          CACTUS SONAR
+    <div
+      className="min-h-screen w-full text-zinc-200 flex flex-col items-center py-10 gap-6 overflow-x-hidden"
+      style={{
+        background:
+          "radial-gradient(ellipse at top, #1a1233 0%, #0f0a1e 55%, #07050f 100%)",
+      }}
+    >
+      <header className="flex flex-col items-center gap-2">
+        <h1
+          className="font-pixel"
+          style={{
+            fontSize: "16px",
+            letterSpacing: "0.2em",
+            color: "#e4e4e7",
+            textShadow: "0 0 12px rgba(167,139,250,0.5)",
+          }}
+        >
+          CACTUS·SONAR
         </h1>
-        <p className="text-[10px] text-zinc-500 uppercase tracking-[0.3em]">
-          modular synthesis · v0.3
+        <p className="text-[10px] text-zinc-500 uppercase tracking-[0.3em] font-mono">
+          modular synthesis · v0.4
         </p>
       </header>
 
-      <div className="flex items-center gap-5">
-        <PowerButton powered={powered} onPower={handlePower} />
-        <span className="text-[11px] uppercase tracking-[0.25em] text-zinc-500 font-mono">
-          {powered ? "audio · live" : "audio · off — press power"}
-        </span>
+      <div className="flex items-center gap-6">
+        <Pet powered={powered} />
+        <div className="flex flex-col items-center gap-3">
+          <PowerButton powered={powered} onPower={handlePower} />
+          <span className="text-[10px] uppercase tracking-[0.25em] text-zinc-500 font-mono">
+            {powered ? "audio · live" : "audio · off"}
+          </span>
+        </div>
       </div>
+
+      <PresetBar />
 
       {/* Rack scrolls horizontally if it doesn't fit the viewport. */}
       <div className="w-full overflow-x-auto px-4">
@@ -57,10 +78,22 @@ export function Rack() {
 
 function RackFrame({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rounded-lg border border-zinc-800 bg-gradient-to-b from-zinc-900 to-zinc-950 shadow-2xl shadow-black/60">
-      <div className="h-3 rounded-t-lg bg-gradient-to-b from-zinc-700 to-zinc-800 border-b border-black/60" />
+    <div
+      className="rounded-lg shadow-2xl shadow-black/70"
+      style={{
+        background: "linear-gradient(180deg, #1a1530 0%, #0a0716 100%)",
+        border: "1px solid #2a213f",
+      }}
+    >
+      <div
+        className="h-3 rounded-t-lg border-b border-black/60"
+        style={{ background: "linear-gradient(180deg, #463663 0%, #2a213f 100%)" }}
+      />
       <div className="flex p-3 gap-2">{children}</div>
-      <div className="h-3 rounded-b-lg bg-gradient-to-b from-zinc-800 to-zinc-700 border-t border-black/60" />
+      <div
+        className="h-3 rounded-b-lg border-t border-black/60"
+        style={{ background: "linear-gradient(180deg, #2a213f 0%, #463663 100%)" }}
+      />
     </div>
   );
 }

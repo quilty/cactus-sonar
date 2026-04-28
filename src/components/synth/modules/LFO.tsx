@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { Module } from "../Module";
 import { Knob } from "../Knob";
 import { engine, type LFODestination, type Waveform } from "@/audio/engine";
+import { usePreset } from "@/state/preset";
 
 const WAVES: Waveform[] = ["sine", "triangle", "sawtooth", "square"];
 const DESTS: LFODestination[] = ["off", "cutoff", "pitch", "amp"];
@@ -21,10 +22,10 @@ const formatRate = (hz: number): string =>
 type Props = { powered: boolean };
 
 export function LFO({ powered }: Props) {
-  const [rate, setRate] = useState(() => rateToKnob(1));
-  const [amount, setAmount] = useState(0);
-  const [wave, setWave] = useState<Waveform>("triangle");
-  const [dest, setDest] = useState<LFODestination>("off");
+  const [rate, setRate] = usePreset("lfo.rate", rateToKnob(1));
+  const [amount, setAmount] = usePreset("lfo.amount", 0);
+  const [wave, setWave] = usePreset<Waveform>("lfo.wave", "triangle");
+  const [dest, setDest] = usePreset<LFODestination>("lfo.dest", "off");
 
   useEffect(() => {
     if (!powered) return;
@@ -49,7 +50,7 @@ export function LFO({ powered }: Props) {
   }, [dest, powered]);
 
   return (
-    <Module title="LFO 01" hp={12}>
+    <Module title="LFO 01" hp={12} accent="var(--lfo-accent)">
       <Knob
         label="rate"
         value={rate}
@@ -72,11 +73,20 @@ export function LFO({ powered }: Props) {
             <button
               key={w}
               onClick={() => setWave(w)}
-              className={`text-[10px] uppercase tracking-wider rounded px-1 py-1 border transition-colors ${
+              className="text-[10px] uppercase tracking-wider rounded px-1 py-1 border transition-colors"
+              style={
                 wave === w
-                  ? "border-amber-400/60 bg-amber-400/10 text-amber-200"
-                  : "border-zinc-700 bg-zinc-900 text-zinc-400 hover:bg-zinc-800"
-              }`}
+                  ? {
+                      borderColor: "var(--accent)",
+                      background: "color-mix(in srgb, var(--accent) 12%, transparent)",
+                      color: "var(--accent)",
+                    }
+                  : {
+                      borderColor: "#3f3f46",
+                      background: "#18121f",
+                      color: "#a1a1aa",
+                    }
+              }
             >
               {w}
             </button>
@@ -93,11 +103,20 @@ export function LFO({ powered }: Props) {
             <button
               key={d}
               onClick={() => setDest(d)}
-              className={`text-[10px] uppercase tracking-wider rounded px-1 py-1 border transition-colors ${
+              className="text-[10px] uppercase tracking-wider rounded px-1 py-1 border transition-colors"
+              style={
                 dest === d
-                  ? "border-amber-400/60 bg-amber-400/10 text-amber-200"
-                  : "border-zinc-700 bg-zinc-900 text-zinc-400 hover:bg-zinc-800"
-              }`}
+                  ? {
+                      borderColor: "var(--accent)",
+                      background: "color-mix(in srgb, var(--accent) 12%, transparent)",
+                      color: "var(--accent)",
+                    }
+                  : {
+                      borderColor: "#3f3f46",
+                      background: "#18121f",
+                      color: "#a1a1aa",
+                    }
+              }
             >
               {d}
             </button>
