@@ -6,6 +6,7 @@ import { usePreset } from "@/state/preset";
 import { PowerButton } from "./PowerButton";
 import { Pet } from "./Pet";
 import { PresetBar } from "./PresetBar";
+import { SideNav } from "./SideNav";
 import { Oscillator } from "./modules/Oscillator";
 import { Mixer } from "./modules/Mixer";
 import { Filter } from "./modules/Filter";
@@ -16,7 +17,7 @@ import { Keyboard } from "./Keyboard";
 
 export function Rack() {
   const [powered, setPowered] = useState(false);
-  const [poly, setPoly] = usePreset<boolean>("global.poly", false);
+  const [poly, setPoly] = usePreset<boolean>("global.poly", true);
 
   const handlePower = async () => {
     if (powered) return;
@@ -38,6 +39,7 @@ export function Rack() {
           "radial-gradient(ellipse at top, #1a1233 0%, #0f0a1e 55%, #07050f 100%)",
       }}
     >
+      <SideNav poly={poly} onPolyChange={setPoly} />
       <header className="flex flex-col items-center gap-2">
         <h1
           className="font-pixel"
@@ -62,7 +64,6 @@ export function Rack() {
           <span className="text-[10px] uppercase tracking-[0.25em] text-zinc-500 font-mono">
             {powered ? "audio · live" : "audio · off"}
           </span>
-          <VoiceModeToggle poly={poly} onChange={setPoly} />
         </div>
       </div>
 
@@ -95,54 +96,6 @@ export function Rack() {
 
       <Keyboard powered={powered} />
     </div>
-  );
-}
-
-function VoiceModeToggle({
-  poly,
-  onChange,
-}: {
-  poly: boolean;
-  onChange: (v: boolean) => void;
-}) {
-  return (
-    <div className="flex gap-1 text-[9px] uppercase tracking-[0.2em] font-mono">
-      <ModeButton selected={!poly} onClick={() => onChange(false)} label="mono" />
-      <ModeButton selected={poly} onClick={() => onChange(true)} label="poly" />
-    </div>
-  );
-}
-
-function ModeButton({
-  selected,
-  onClick,
-  label,
-}: {
-  selected: boolean;
-  onClick: () => void;
-  label: string;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      aria-pressed={selected}
-      className="px-2 py-1 border rounded transition-colors"
-      style={
-        selected
-          ? {
-              borderColor: "#fbbf24",
-              background: "rgba(251,191,36,0.12)",
-              color: "#fbbf24",
-            }
-          : {
-              borderColor: "#3f3f46",
-              background: "#18121f",
-              color: "#a1a1aa",
-            }
-      }
-    >
-      {label}
-    </button>
   );
 }
 
