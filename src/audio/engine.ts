@@ -5,6 +5,7 @@ import * as Tone from "tone";
 export type Waveform = "sine" | "triangle" | "sawtooth" | "square";
 export type FilterType = "lowpass" | "highpass" | "bandpass";
 export type LFODestination = "off" | "cutoff" | "pitch" | "amp";
+export type OscIndex = 0 | 1;
 
 /** A4 = MIDI 69 = 440Hz. Equal temperament. */
 export const midiToHz = (midi: number): number =>
@@ -12,35 +13,25 @@ export const midiToHz = (midi: number): number =>
 
 const VOICE_COUNT = 8;
 
+/**
+ * One polyphonic voice. Two oscillators each gain-staged before being summed
+ * into a per-voice amplitude envelope. The envelope feeds into the shared
+ * filter, then to the master output.
+ *
+ *   osc1 → gain1 ─┐
+ *                 ├── envelope → (shared) filter → masterGain → destination
+ *   osc2 → gain2 ─┘
+ */
 type Voice = {
-  oscillator: Tone.Oscillator;
+  osc1: Tone.Oscillator;
+  osc2: Tone.Oscillator;
+  gain1: Tone.Gain;
+  gain2: Tone.Gain;
   envelope: Tone.AmplitudeEnvelope;
   /** -1 = idle. Otherwise the MIDI note this voice is currently playing. */
   midi: number;
 };
 
-/**
- * Audio engine — owns every Tone.js object.
- *
- * Signal chain (per voice → shared tail):
- *   voice(oscillator → envelope) ──┐
- *                                  ├── filter → masterGain → destination
- *   voice(oscillator → envelope) ──┘                                ↓
- *                                                              waveform tap
- *
- * Voice model:
- *   - All voices are pre-allocated at init() and run continuously.
- *   - In MONO mode (default), only voice[0] is used. Last-note priority +
- *     legato are preserved (envelope only retriggers on the first held key).
- *   - In POLY mode, every noteOn allocates a free voice (or steals the
- *     longest-playing one if all 8 are busy). Each voice has its own
- *     envelope, so chords get independent amplitude shaping.
- *
- * LFO routing:
- *   - cutoff → shared filter.frequency
- *   - amp    → shared masterGain.gain
- *   - pitch  → fanned out to every voice oscillator's detune
- */
 class AudioEngine {
   private filter: Tone.Filter | null = null;
   private masterGain: Tone.Gain | null = null;
@@ -49,20 +40,19 @@ class AudioEngine {
   private voices: Voice[] = [];
   private started = false;
 
-  /** Tuning offset in semitones (float). Applied on top of the played note. */
-  private tuneSemitones = 0;
+  /** Per-oscillator tuning state, used when applying frequency to voices. */
+  private oscTune: [number, number] = [0, 0]; // semitones (float)
+  private oscDetune: [number, number] = [0, 0]; // cents (float)
 
-  /** Current LFO routing state. */
+  /** Mixer levels (0..1) for osc1 and osc2. */
+  private mixLevels: [number, number] = [1.0, 0.0];
+
   private lfoDestination: LFODestination = "off";
   private lfoAmount = 0;
 
-  /** Mode + per-mode bookkeeping. */
   private polyphony = false;
-  /** MONO: held keys, ordered. Last is the currently-sounding pitch. */
   private heldNotes: number[] = [];
-  /** POLY: which voice is currently allocated to which MIDI note. */
   private noteToVoice = new Map<number, Voice>();
-  /** POLY: voices ordered by allocation age. Oldest at front, for stealing. */
   private voiceOrder: Voice[] = [];
 
   async init(): Promise<void> {
@@ -77,12 +67,10 @@ class AudioEngine {
       Q: 1,
     }).connect(this.masterGain);
 
-    // Allocate voice pool. Each voice = osc → envelope → shared filter.
     for (let i = 0; i < VOICE_COUNT; i++) {
       this.voices.push(this.createVoice());
     }
 
-    // LFO runs continuously; routing is what makes it audible.
     this.lfo = new Tone.LFO({
       frequency: 1,
       type: "triangle",
@@ -90,7 +78,6 @@ class AudioEngine {
       max: 0,
     }).start();
 
-    // Scope tap on master output.
     this.waveform = new Tone.Waveform(1024);
     this.masterGain.connect(this.waveform);
 
@@ -104,12 +91,22 @@ class AudioEngine {
       sustain: 0.7,
       release: 0.4,
     }).connect(this.filter!);
-    const oscillator = new Tone.Oscillator({
+
+    const gain1 = new Tone.Gain(this.mixLevels[0]).connect(envelope);
+    const gain2 = new Tone.Gain(this.mixLevels[1]).connect(envelope);
+
+    const osc1 = new Tone.Oscillator({
       frequency: 220,
       type: "sine",
-    }).connect(envelope);
-    oscillator.start();
-    return { oscillator, envelope, midi: -1 };
+    }).connect(gain1);
+    const osc2 = new Tone.Oscillator({
+      frequency: 220,
+      type: "sawtooth",
+    }).connect(gain2);
+    osc1.start();
+    osc2.start();
+
+    return { osc1, osc2, gain1, gain2, envelope, midi: -1 };
   }
 
   isStarted(): boolean {
@@ -125,31 +122,50 @@ class AudioEngine {
 
   setPolyphony(enabled: boolean): void {
     if (this.polyphony === enabled) return;
-    // Clean slate so we don't carry stuck notes across the mode boundary.
     this.allNotesOff();
     this.polyphony = enabled;
   }
-
   isPoly(): boolean {
     return this.polyphony;
   }
 
-  // ── Oscillator (fans out to all voices) ───────────────────────
+  // ── Per-oscillator controls (fan out to all voices) ───────────
 
-  setWaveform(type: Waveform): void {
-    for (const v of this.voices) v.oscillator.type = type;
+  setOscWaveform(idx: OscIndex, type: Waveform): void {
+    for (const v of this.voices) {
+      (idx === 0 ? v.osc1 : v.osc2).type = type;
+    }
   }
 
-  setTuneSemitones(n: number): void {
-    this.tuneSemitones = n;
+  setOscTune(idx: OscIndex, semitones: number): void {
+    this.oscTune[idx] = semitones;
+    // Re-tune any voice that's currently sounding.
     if (this.polyphony) {
-      // Re-tune every active poly voice.
       for (const [midi, voice] of this.noteToVoice) {
-        voice.oscillator.frequency.rampTo(midiToHz(midi + n), 0.01);
+        this.applyOscFrequency(voice, idx, midi);
       }
     } else if (this.heldNotes.length > 0) {
       const top = this.heldNotes[this.heldNotes.length - 1];
-      this.voices[0]?.oscillator.frequency.rampTo(midiToHz(top + n), 0.01);
+      this.applyOscFrequency(this.voices[0], idx, top);
+    }
+  }
+
+  setOscDetune(idx: OscIndex, cents: number): void {
+    this.oscDetune[idx] = cents;
+    // detune.value is the static offset; LFO connections (when active) sum on top.
+    for (const v of this.voices) {
+      (idx === 0 ? v.osc1 : v.osc2).detune.value = cents;
+    }
+  }
+
+  // ── Mixer ─────────────────────────────────────────────────────
+
+  setMixLevel(idx: OscIndex, level01: number): void {
+    const clamped = Math.max(0, Math.min(1, level01));
+    this.mixLevels[idx] = clamped;
+    for (const v of this.voices) {
+      const target = idx === 0 ? v.gain1 : v.gain2;
+      target.gain.rampTo(clamped, 0.05);
     }
   }
 
@@ -221,8 +237,11 @@ class AudioEngine {
         const depth = 100 * this.lfoAmount;
         this.lfo.min = -depth;
         this.lfo.max = depth;
-        // Fan out to every voice oscillator's detune.
-        for (const v of this.voices) this.lfo.connect(v.oscillator.detune);
+        // Both oscillators of every voice — vibrato applies to whole voice.
+        for (const v of this.voices) {
+          this.lfo.connect(v.osc1.detune);
+          this.lfo.connect(v.osc2.detune);
+        }
         return;
       }
       case "amp": {
@@ -260,17 +279,13 @@ class AudioEngine {
     this.voiceOrder = [];
   }
 
-  // MONO: legato + last-note priority. Only voice[0] is used.
   private noteOnMono(midi: number): void {
     if (this.heldNotes.includes(midi)) return;
     const voice = this.voices[0];
     if (!voice) return;
     const wasEmpty = this.heldNotes.length === 0;
     this.heldNotes.push(midi);
-    voice.oscillator.frequency.rampTo(
-      midiToHz(midi + this.tuneSemitones),
-      0.01,
-    );
+    this.applyVoiceFrequency(voice, midi);
     if (wasEmpty) {
       voice.envelope.triggerAttack();
       voice.midi = midi;
@@ -288,28 +303,19 @@ class AudioEngine {
       voice.midi = -1;
     } else {
       const top = this.heldNotes[this.heldNotes.length - 1];
-      voice.oscillator.frequency.rampTo(
-        midiToHz(top + this.tuneSemitones),
-        0.01,
-      );
+      this.applyVoiceFrequency(voice, top);
     }
   }
 
-  // POLY: each note gets its own voice. Steal oldest if pool exhausted.
   private noteOnPoly(midi: number): void {
-    if (this.noteToVoice.has(midi)) return; // dedupe key repeat
-
+    if (this.noteToVoice.has(midi)) return;
     let voice = this.voices.find((v) => v.midi === -1);
     if (!voice) {
-      // Steal: oldest at front of voiceOrder.
       voice = this.voiceOrder.shift();
       if (!voice) return;
       this.noteToVoice.delete(voice.midi);
     }
-    voice.oscillator.frequency.rampTo(
-      midiToHz(midi + this.tuneSemitones),
-      0.005,
-    );
+    this.applyVoiceFrequency(voice, midi);
     voice.midi = midi;
     voice.envelope.triggerAttack();
     this.noteToVoice.set(midi, voice);
@@ -324,6 +330,22 @@ class AudioEngine {
     this.noteToVoice.delete(midi);
     const idx = this.voiceOrder.indexOf(voice);
     if (idx >= 0) this.voiceOrder.splice(idx, 1);
+  }
+
+  // ── Internal frequency application ────────────────────────────
+
+  private applyVoiceFrequency(voice: Voice, midi: number): void {
+    voice.osc1.frequency.rampTo(midiToHz(midi + this.oscTune[0]), 0.01);
+    voice.osc2.frequency.rampTo(midiToHz(midi + this.oscTune[1]), 0.01);
+  }
+
+  private applyOscFrequency(
+    voice: Voice,
+    idx: OscIndex,
+    midi: number,
+  ): void {
+    const osc = idx === 0 ? voice.osc1 : voice.osc2;
+    osc.frequency.rampTo(midiToHz(midi + this.oscTune[idx]), 0.01);
   }
 }
 

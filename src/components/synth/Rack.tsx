@@ -7,6 +7,7 @@ import { PowerButton } from "./PowerButton";
 import { Pet } from "./Pet";
 import { PresetBar } from "./PresetBar";
 import { Oscillator } from "./modules/Oscillator";
+import { Mixer } from "./modules/Mixer";
 import { Filter } from "./modules/Filter";
 import { Envelope } from "./modules/Envelope";
 import { LFO } from "./modules/LFO";
@@ -50,7 +51,7 @@ export function Rack() {
           CACTUS·SONAR
         </h1>
         <p className="text-[10px] text-zinc-500 uppercase tracking-[0.3em] font-mono">
-          modular synthesis · v0.5
+          modular synthesis · v0.6
         </p>
       </header>
 
@@ -71,7 +72,19 @@ export function Rack() {
       <div className="w-full overflow-x-auto px-4">
         <div className="mx-auto" style={{ width: "fit-content" }}>
           <RackFrame>
-            <Oscillator powered={powered} />
+            <Oscillator
+              powered={powered}
+              index={0}
+              title="VCO 01"
+              defaultWave="sine"
+            />
+            <Oscillator
+              powered={powered}
+              index={1}
+              title="VCO 02"
+              defaultWave="sawtooth"
+            />
+            <Mixer powered={powered} />
             <Filter powered={powered} />
             <Envelope powered={powered} />
             <LFO powered={powered} />

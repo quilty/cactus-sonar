@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { Module } from "../Module";
 import { Knob } from "../Knob";
-import { engine, type Waveform } from "@/audio/engine";
+import { engine, type OscIndex, type Waveform } from "@/audio/engine";
 import { usePreset } from "@/state/preset";
 
 const WAVEFORMS: Waveform[] = ["sine", "triangle", "sawtooth", "square"];
@@ -13,35 +13,64 @@ const knobToSemitones = (v: number): number => (v - 0.5) * 2 * TUNE_RANGE_ST;
 const formatSemitones = (st: number): string =>
   `${st >= 0 ? "+" : ""}${st.toFixed(1)} st`;
 
-type Props = { powered: boolean };
+const DETUNE_RANGE_CENTS = 50; // ±50 cents fine detune
+const knobToCents = (v: number): number => (v - 0.5) * 2 * DETUNE_RANGE_CENTS;
+const formatCents = (c: number): string =>
+  `${c >= 0 ? "+" : ""}${c.toFixed(1)} ¢`;
 
-export function Oscillator({ powered }: Props) {
-  const [tuneKnob, setTuneKnob] = usePreset("vco.tune", 0.5);
-  const [waveform, setWaveform] = usePreset<Waveform>("vco.wave", "sine");
+type Props = {
+  powered: boolean;
+  index: OscIndex;
+  title: string;
+  /** Default waveform when no preset has been saved. */
+  defaultWave?: Waveform;
+};
 
-  // Sync UI → engine on power-on (so engine matches what the knobs say).
+export function Oscillator({
+  powered,
+  index,
+  title,
+  defaultWave = "sine",
+}: Props) {
+  const keyPrefix = index === 0 ? "vco1" : "vco2";
+  const [tuneKnob, setTuneKnob] = usePreset(`${keyPrefix}.tune`, 0.5);
+  const [detuneKnob, setDetuneKnob] = usePreset(`${keyPrefix}.detune`, 0.5);
+  const [waveform, setWaveform] = usePreset<Waveform>(
+    `${keyPrefix}.wave`,
+    defaultWave,
+  );
+
   useEffect(() => {
     if (!powered) return;
-    engine.setTuneSemitones(knobToSemitones(tuneKnob));
-    engine.setWaveform(waveform);
+    engine.setOscTune(index, knobToSemitones(tuneKnob));
+    engine.setOscDetune(index, knobToCents(detuneKnob));
+    engine.setOscWaveform(index, waveform);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [powered]);
 
   useEffect(() => {
-    if (powered) engine.setTuneSemitones(knobToSemitones(tuneKnob));
-  }, [tuneKnob, powered]);
-
+    if (powered) engine.setOscTune(index, knobToSemitones(tuneKnob));
+  }, [tuneKnob, powered, index]);
   useEffect(() => {
-    if (powered) engine.setWaveform(waveform);
-  }, [waveform, powered]);
+    if (powered) engine.setOscDetune(index, knobToCents(detuneKnob));
+  }, [detuneKnob, powered, index]);
+  useEffect(() => {
+    if (powered) engine.setOscWaveform(index, waveform);
+  }, [waveform, powered, index]);
 
   return (
-    <Module title="VCO 01" hp={10} accent="var(--vco-accent)">
+    <Module title={title} hp={10} accent="var(--vco-accent)">
       <Knob
         label="tune"
         value={tuneKnob}
         onChange={setTuneKnob}
         format={(v) => formatSemitones(knobToSemitones(v))}
+      />
+      <Knob
+        label="detune"
+        value={detuneKnob}
+        onChange={setDetuneKnob}
+        format={(v) => formatCents(knobToCents(v))}
       />
 
       <div className="flex flex-col gap-1 w-full pt-2">

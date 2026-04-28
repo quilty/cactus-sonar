@@ -7,6 +7,7 @@
 
   /* Per-module accent colors. Picked for vibrancy + 16-bit palette feel. */
   --vco-accent: #22d3ee;   /* cyan */
+  --mix-accent: #fb923c;   /* orange */
   --vcf-accent: #a3e635;   /* lime */
   --env-accent: #fbbf24;   /* gold */
   --lfo-accent: #f472b6;   /* hot pink */
