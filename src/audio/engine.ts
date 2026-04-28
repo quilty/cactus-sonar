@@ -3,6 +3,8 @@
 import * as Tone from "tone";
 
 export type Waveform = "sine" | "triangle" | "sawtooth" | "square";
+export type FilterType = "lowpass" | "highpass" | "bandpass";
+export type LFODestination = "off" | "cutoff" | "pitch" | "amp";
 
 /** A4 = MIDI 69 = 440Hz. Equal temperament. */
 export const midiToHz = (midi: number): number =>
@@ -12,21 +14,21 @@ export const midiToHz = (midi: number): number =>
  * Audio engine — owns every Tone.js object.
  *
  * Signal chain:
- *   Oscillator → AmplitudeEnvelope → masterGain → destination
+ *   Oscillator → Filter → AmplitudeEnvelope → masterGain → destination
+ *                                                        ↓
+ *                                                   Waveform tap (parallel)
  *
- * Note model: monophonic with last-note priority and legato.
- *   - heldNotes is ordered (most-recent at end).
- *   - Pressing the first key triggers the envelope.
- *   - Pressing additional keys slides the oscillator pitch but does NOT
- *     retrigger the envelope (legato).
- *   - Releasing keys slides back to the next-most-recent held note.
- *   - Releasing the last key triggers envelope release.
+ * LFO is created but unrouted by default. setLFODestination() patches it
+ * onto one of three modulation targets (filter.frequency, oscillator.detune,
+ * masterGain.gain). Web Audio sums multiple connections to the same param,
+ * so the LFO output adds to the user's static knob value.
  */
 class AudioEngine {
   private oscillator: Tone.Oscillator | null = null;
+  private filter: Tone.Filter | null = null;
   private envelope: Tone.AmplitudeEnvelope | null = null;
   private masterGain: Tone.Gain | null = null;
-  /** Parallel tap on the master output for visualization. Doesn't affect audio. */
+  private lfo: Tone.LFO | null = null;
   private waveform: Tone.Waveform | null = null;
   private started = false;
 
@@ -36,7 +38,10 @@ class AudioEngine {
   /** Tuning offset in semitones (float). Applied on top of the played note. */
   private tuneSemitones = 0;
 
-  /** Idempotent. Must be called from a user gesture. */
+  /** Current LFO routing state. */
+  private lfoDestination: LFODestination = "off";
+  private lfoAmount = 0;
+
   async init(): Promise<void> {
     if (this.started) return;
     await Tone.start();
@@ -50,31 +55,42 @@ class AudioEngine {
       release: 0.4,
     }).connect(this.masterGain);
 
+    this.filter = new Tone.Filter({
+      type: "lowpass",
+      frequency: 2000,
+      Q: 1,
+    }).connect(this.envelope);
+
     this.oscillator = new Tone.Oscillator({
       frequency: 220,
       type: "sine",
-    }).connect(this.envelope);
+    }).connect(this.filter);
     this.oscillator.start();
 
-    // Scope tap: parallel branch off masterGain, doesn't disrupt audio path.
+    // LFO runs continuously; routing is what actually makes it audible.
+    this.lfo = new Tone.LFO({
+      frequency: 1,
+      type: "triangle",
+      min: 0,
+      max: 0,
+    }).start();
+
     this.waveform = new Tone.Waveform(1024);
     this.masterGain.connect(this.waveform);
 
     this.started = true;
   }
 
-  /** Latest time-domain samples [-1..1], or null before init. */
-  getWaveform(): Float32Array | null {
-    if (!this.waveform) return null;
-    // Tone returns its own array type that's array-like; cast for the consumer.
-    return this.waveform.getValue() as unknown as Float32Array;
-  }
-
   isStarted(): boolean {
     return this.started;
   }
 
-  // ── Oscillator controls ───────────────────────────────────────
+  getWaveform(): Float32Array | null {
+    if (!this.waveform) return null;
+    return this.waveform.getValue() as unknown as Float32Array;
+  }
+
+  // ── Oscillator ────────────────────────────────────────────────
 
   setWaveform(type: Waveform): void {
     if (this.oscillator) this.oscillator.type = type;
@@ -87,7 +103,19 @@ class AudioEngine {
     }
   }
 
-  // ── Envelope controls ─────────────────────────────────────────
+  // ── Filter ────────────────────────────────────────────────────
+
+  setFilterCutoff(hz: number): void {
+    this.filter?.frequency.rampTo(hz, 0.04);
+  }
+  setFilterResonance(q: number): void {
+    if (this.filter) this.filter.Q.value = q;
+  }
+  setFilterType(type: FilterType): void {
+    if (this.filter) this.filter.type = type;
+  }
+
+  // ── Envelope ──────────────────────────────────────────────────
 
   setAttack(seconds: number): void {
     if (this.envelope) this.envelope.attack = seconds;
@@ -104,11 +132,74 @@ class AudioEngine {
     if (this.envelope) this.envelope.release = seconds;
   }
 
+  // ── LFO ───────────────────────────────────────────────────────
+
+  setLFORate(hz: number): void {
+    if (this.lfo) this.lfo.frequency.value = hz;
+  }
+  setLFOWaveform(type: Waveform): void {
+    if (this.lfo) this.lfo.type = type;
+  }
+  setLFODestination(dest: LFODestination): void {
+    this.lfoDestination = dest;
+    this.routeLFO();
+  }
+  setLFOAmount(amount01: number): void {
+    this.lfoAmount = Math.max(0, Math.min(1, amount01));
+    this.routeLFO();
+  }
+
+  /**
+   * Reroutes LFO based on current destination + amount. Disconnects first
+   * (idempotent — safe to call repeatedly).
+   *
+   * Per-destination depth scaling: filter cutoff in Hz, pitch in cents,
+   * amp in linear gain. The "right" depth differs wildly between targets,
+   * so amount=1 means "max sensible swing" rather than a fixed unit.
+   */
+  private routeLFO(): void {
+    if (!this.lfo) return;
+    this.lfo.disconnect();
+
+    if (this.lfoDestination === "off" || this.lfoAmount === 0) {
+      this.lfo.min = 0;
+      this.lfo.max = 0;
+      return;
+    }
+
+    switch (this.lfoDestination) {
+      case "cutoff": {
+        if (!this.filter) return;
+        const depth = 3000 * this.lfoAmount; // ±3 kHz max
+        this.lfo.min = -depth;
+        this.lfo.max = depth;
+        this.lfo.connect(this.filter.frequency);
+        return;
+      }
+      case "pitch": {
+        if (!this.oscillator) return;
+        const depth = 100 * this.lfoAmount; // ±100 cents (1 semitone) max
+        this.lfo.min = -depth;
+        this.lfo.max = depth;
+        this.lfo.connect(this.oscillator.detune);
+        return;
+      }
+      case "amp": {
+        if (!this.masterGain) return;
+        const depth = 0.3 * this.lfoAmount; // ±0.3 gain max
+        this.lfo.min = -depth;
+        this.lfo.max = depth;
+        this.lfo.connect(this.masterGain.gain);
+        return;
+      }
+    }
+  }
+
   // ── Note triggering ───────────────────────────────────────────
 
   noteOn(midi: number): void {
     if (!this.envelope || !this.oscillator) return;
-    if (this.heldNotes.includes(midi)) return; // dedupe key repeat
+    if (this.heldNotes.includes(midi)) return;
 
     const wasEmpty = this.heldNotes.length === 0;
     this.heldNotes.push(midi);
@@ -116,7 +207,6 @@ class AudioEngine {
     if (wasEmpty) {
       this.envelope.triggerAttack();
     }
-    // else: legato — pitch slides but envelope keeps going
   }
 
   noteOff(midi: number): void {
@@ -132,7 +222,6 @@ class AudioEngine {
     }
   }
 
-  /** Force release everything. Used on window blur to prevent stuck notes. */
   allNotesOff(): void {
     this.heldNotes = [];
     this.envelope?.triggerRelease();

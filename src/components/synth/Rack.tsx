@@ -4,7 +4,9 @@ import { useState } from "react";
 import { engine } from "@/audio/engine";
 import { PowerButton } from "./PowerButton";
 import { Oscillator } from "./modules/Oscillator";
+import { Filter } from "./modules/Filter";
 import { Envelope } from "./modules/Envelope";
+import { LFO } from "./modules/LFO";
 import { Scope } from "./modules/Scope";
 import { Keyboard } from "./Keyboard";
 
@@ -18,13 +20,13 @@ export function Rack() {
   };
 
   return (
-    <div className="min-h-screen w-full bg-zinc-950 text-zinc-200 flex flex-col items-center py-12 gap-8">
+    <div className="min-h-screen w-full bg-zinc-950 text-zinc-200 flex flex-col items-center py-12 gap-8 overflow-x-hidden">
       <header className="flex flex-col items-center gap-1">
         <h1 className="text-2xl font-light tracking-[0.4em] text-zinc-300">
           CACTUS SONAR
         </h1>
         <p className="text-[10px] text-zinc-500 uppercase tracking-[0.3em]">
-          modular synthesis · v0.2
+          modular synthesis · v0.3
         </p>
       </header>
 
@@ -35,11 +37,18 @@ export function Rack() {
         </span>
       </div>
 
-      <RackFrame>
-        <Oscillator powered={powered} />
-        <Envelope powered={powered} />
-        <Scope powered={powered} />
-      </RackFrame>
+      {/* Rack scrolls horizontally if it doesn't fit the viewport. */}
+      <div className="w-full overflow-x-auto px-4">
+        <div className="mx-auto" style={{ width: "fit-content" }}>
+          <RackFrame>
+            <Oscillator powered={powered} />
+            <Filter powered={powered} />
+            <Envelope powered={powered} />
+            <LFO powered={powered} />
+            <Scope powered={powered} />
+          </RackFrame>
+        </div>
+      </div>
 
       <Keyboard powered={powered} />
     </div>
