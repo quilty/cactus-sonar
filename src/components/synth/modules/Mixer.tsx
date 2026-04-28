@@ -20,13 +20,6 @@ export function Mixer({ powered }: Props) {
   const [osc2Level, setOsc2Level] = usePreset("mix.osc2", 0.0);
 
   useEffect(() => {
-    if (!powered) return;
-    engine.setMixLevel(0, osc1Level);
-    engine.setMixLevel(1, osc2Level);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [powered]);
-
-  useEffect(() => {
     if (powered) engine.setMixLevel(0, osc1Level);
   }, [osc1Level, powered]);
   useEffect(() => {

@@ -28,15 +28,6 @@ export function LFO({ powered }: Props) {
   const [dest, setDest] = usePreset<LFODestination>("lfo.dest", "off");
 
   useEffect(() => {
-    if (!powered) return;
-    engine.setLFORate(knobToRate(rate));
-    engine.setLFOAmount(amount);
-    engine.setLFOWaveform(wave);
-    engine.setLFODestination(dest);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [powered]);
-
-  useEffect(() => {
     if (powered) engine.setLFORate(knobToRate(rate));
   }, [rate, powered]);
   useEffect(() => {

@@ -31,16 +31,6 @@ export function Envelope({ powered }: Props) {
   const [s, setS] = usePreset("env.s", 0.7);
   const [r, setR] = usePreset("env.r", timeToKnob(0.4, REL_MIN, REL_MAX));
 
-  // Sync on power-on.
-  useEffect(() => {
-    if (!powered) return;
-    engine.setAttack(knobToTime(a, ATK_MIN, ATK_MAX));
-    engine.setDecay(knobToTime(d, DEC_MIN, DEC_MAX));
-    engine.setSustain(s);
-    engine.setRelease(knobToTime(r, REL_MIN, REL_MAX));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [powered]);
-
   useEffect(() => {
     if (powered) engine.setAttack(knobToTime(a, ATK_MIN, ATK_MAX));
   }, [a, powered]);

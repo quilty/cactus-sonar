@@ -40,14 +40,9 @@ export function Oscillator({
     defaultWave,
   );
 
-  useEffect(() => {
-    if (!powered) return;
-    engine.setOscTune(index, knobToSemitones(tuneKnob));
-    engine.setOscDetune(index, knobToCents(detuneKnob));
-    engine.setOscWaveform(index, waveform);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [powered]);
-
+  // Each per-value effect includes `powered` in its deps, so they all
+  // re-fire when power flips on — pushing current UI state to the engine
+  // without needing a separate "sync everything" effect.
   useEffect(() => {
     if (powered) engine.setOscTune(index, knobToSemitones(tuneKnob));
   }, [tuneKnob, powered, index]);

@@ -34,14 +34,6 @@ export function Filter({ powered }: Props) {
   const [type, setType] = usePreset<FilterType>("vcf.type", "lowpass");
 
   useEffect(() => {
-    if (!powered) return;
-    engine.setFilterCutoff(knobToCutoff(cutoff));
-    engine.setFilterResonance(knobToQ(reso));
-    engine.setFilterType(type);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [powered]);
-
-  useEffect(() => {
     if (powered) engine.setFilterCutoff(knobToCutoff(cutoff));
   }, [cutoff, powered]);
   useEffect(() => {
