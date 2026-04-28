@@ -31,6 +31,15 @@ const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", 
 const midiToName = (midi: number): string =>
   `${NOTE_NAMES[midi % 12]}${Math.floor(midi / 12) - 1}`;
 
+// True when the event originated inside a text-entry control, so the synth
+// should yield to the OS/browser handling it as text input.
+function isTypingTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const tag = target.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+  return target.isContentEditable;
+}
+
 // ── Layout ──────────────────────────────────────────────────────
 const FIRST_MIDI = 60;        // C4
 const LAST_MIDI = 84;         // C6 (exclusive)
@@ -71,6 +80,9 @@ export function Keyboard({ powered }: Props) {
     if (!powered) return;
     const onDown = (e: KeyboardEvent) => {
       if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+      // Computer keyboard takes priority when the user is typing in a form
+      // field — don't intercept those keystrokes for synth notes.
+      if (isTypingTarget(e.target)) return;
       const midi = KEY_TO_MIDI[e.key.toLowerCase()];
       if (midi === undefined) return;
       e.preventDefault();
