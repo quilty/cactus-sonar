@@ -10,30 +10,44 @@ export type LFODestination = "off" | "cutoff" | "pitch" | "amp";
 export const midiToHz = (midi: number): number =>
   440 * Math.pow(2, (midi - 69) / 12);
 
+const VOICE_COUNT = 8;
+
+type Voice = {
+  oscillator: Tone.Oscillator;
+  envelope: Tone.AmplitudeEnvelope;
+  /** -1 = idle. Otherwise the MIDI note this voice is currently playing. */
+  midi: number;
+};
+
 /**
  * Audio engine — owns every Tone.js object.
  *
- * Signal chain:
- *   Oscillator → Filter → AmplitudeEnvelope → masterGain → destination
- *                                                        ↓
- *                                                   Waveform tap (parallel)
+ * Signal chain (per voice → shared tail):
+ *   voice(oscillator → envelope) ──┐
+ *                                  ├── filter → masterGain → destination
+ *   voice(oscillator → envelope) ──┘                                ↓
+ *                                                              waveform tap
  *
- * LFO is created but unrouted by default. setLFODestination() patches it
- * onto one of three modulation targets (filter.frequency, oscillator.detune,
- * masterGain.gain). Web Audio sums multiple connections to the same param,
- * so the LFO output adds to the user's static knob value.
+ * Voice model:
+ *   - All voices are pre-allocated at init() and run continuously.
+ *   - In MONO mode (default), only voice[0] is used. Last-note priority +
+ *     legato are preserved (envelope only retriggers on the first held key).
+ *   - In POLY mode, every noteOn allocates a free voice (or steals the
+ *     longest-playing one if all 8 are busy). Each voice has its own
+ *     envelope, so chords get independent amplitude shaping.
+ *
+ * LFO routing:
+ *   - cutoff → shared filter.frequency
+ *   - amp    → shared masterGain.gain
+ *   - pitch  → fanned out to every voice oscillator's detune
  */
 class AudioEngine {
-  private oscillator: Tone.Oscillator | null = null;
   private filter: Tone.Filter | null = null;
-  private envelope: Tone.AmplitudeEnvelope | null = null;
   private masterGain: Tone.Gain | null = null;
   private lfo: Tone.LFO | null = null;
   private waveform: Tone.Waveform | null = null;
+  private voices: Voice[] = [];
   private started = false;
-
-  /** Held notes, ordered. Last element is the currently-sounding pitch. */
-  private heldNotes: number[] = [];
 
   /** Tuning offset in semitones (float). Applied on top of the played note. */
   private tuneSemitones = 0;
@@ -42,32 +56,33 @@ class AudioEngine {
   private lfoDestination: LFODestination = "off";
   private lfoAmount = 0;
 
+  /** Mode + per-mode bookkeeping. */
+  private polyphony = false;
+  /** MONO: held keys, ordered. Last is the currently-sounding pitch. */
+  private heldNotes: number[] = [];
+  /** POLY: which voice is currently allocated to which MIDI note. */
+  private noteToVoice = new Map<number, Voice>();
+  /** POLY: voices ordered by allocation age. Oldest at front, for stealing. */
+  private voiceOrder: Voice[] = [];
+
   async init(): Promise<void> {
     if (this.started) return;
     await Tone.start();
 
     this.masterGain = new Tone.Gain(0.6).toDestination();
 
-    this.envelope = new Tone.AmplitudeEnvelope({
-      attack: 0.005,
-      decay: 0.2,
-      sustain: 0.7,
-      release: 0.4,
-    }).connect(this.masterGain);
-
     this.filter = new Tone.Filter({
       type: "lowpass",
       frequency: 2000,
       Q: 1,
-    }).connect(this.envelope);
+    }).connect(this.masterGain);
 
-    this.oscillator = new Tone.Oscillator({
-      frequency: 220,
-      type: "sine",
-    }).connect(this.filter);
-    this.oscillator.start();
+    // Allocate voice pool. Each voice = osc → envelope → shared filter.
+    for (let i = 0; i < VOICE_COUNT; i++) {
+      this.voices.push(this.createVoice());
+    }
 
-    // LFO runs continuously; routing is what actually makes it audible.
+    // LFO runs continuously; routing is what makes it audible.
     this.lfo = new Tone.LFO({
       frequency: 1,
       type: "triangle",
@@ -75,10 +90,26 @@ class AudioEngine {
       max: 0,
     }).start();
 
+    // Scope tap on master output.
     this.waveform = new Tone.Waveform(1024);
     this.masterGain.connect(this.waveform);
 
     this.started = true;
+  }
+
+  private createVoice(): Voice {
+    const envelope = new Tone.AmplitudeEnvelope({
+      attack: 0.005,
+      decay: 0.2,
+      sustain: 0.7,
+      release: 0.4,
+    }).connect(this.filter!);
+    const oscillator = new Tone.Oscillator({
+      frequency: 220,
+      type: "sine",
+    }).connect(envelope);
+    oscillator.start();
+    return { oscillator, envelope, midi: -1 };
   }
 
   isStarted(): boolean {
@@ -90,20 +121,39 @@ class AudioEngine {
     return this.waveform.getValue() as unknown as Float32Array;
   }
 
-  // ── Oscillator ────────────────────────────────────────────────
+  // ── Mode ──────────────────────────────────────────────────────
+
+  setPolyphony(enabled: boolean): void {
+    if (this.polyphony === enabled) return;
+    // Clean slate so we don't carry stuck notes across the mode boundary.
+    this.allNotesOff();
+    this.polyphony = enabled;
+  }
+
+  isPoly(): boolean {
+    return this.polyphony;
+  }
+
+  // ── Oscillator (fans out to all voices) ───────────────────────
 
   setWaveform(type: Waveform): void {
-    if (this.oscillator) this.oscillator.type = type;
+    for (const v of this.voices) v.oscillator.type = type;
   }
 
   setTuneSemitones(n: number): void {
     this.tuneSemitones = n;
-    if (this.heldNotes.length > 0) {
-      this.applyFrequency(this.heldNotes[this.heldNotes.length - 1]);
+    if (this.polyphony) {
+      // Re-tune every active poly voice.
+      for (const [midi, voice] of this.noteToVoice) {
+        voice.oscillator.frequency.rampTo(midiToHz(midi + n), 0.01);
+      }
+    } else if (this.heldNotes.length > 0) {
+      const top = this.heldNotes[this.heldNotes.length - 1];
+      this.voices[0]?.oscillator.frequency.rampTo(midiToHz(top + n), 0.01);
     }
   }
 
-  // ── Filter ────────────────────────────────────────────────────
+  // ── Filter (shared) ───────────────────────────────────────────
 
   setFilterCutoff(hz: number): void {
     this.filter?.frequency.rampTo(hz, 0.04);
@@ -115,21 +165,20 @@ class AudioEngine {
     if (this.filter) this.filter.type = type;
   }
 
-  // ── Envelope ──────────────────────────────────────────────────
+  // ── Envelope (fans out to all voices) ─────────────────────────
 
   setAttack(seconds: number): void {
-    if (this.envelope) this.envelope.attack = seconds;
+    for (const v of this.voices) v.envelope.attack = seconds;
   }
   setDecay(seconds: number): void {
-    if (this.envelope) this.envelope.decay = seconds;
+    for (const v of this.voices) v.envelope.decay = seconds;
   }
   setSustain(level01: number): void {
-    if (this.envelope) {
-      this.envelope.sustain = Math.max(0, Math.min(1, level01));
-    }
+    const clamped = Math.max(0, Math.min(1, level01));
+    for (const v of this.voices) v.envelope.sustain = clamped;
   }
   setRelease(seconds: number): void {
-    if (this.envelope) this.envelope.release = seconds;
+    for (const v of this.voices) v.envelope.release = seconds;
   }
 
   // ── LFO ───────────────────────────────────────────────────────
@@ -149,14 +198,6 @@ class AudioEngine {
     this.routeLFO();
   }
 
-  /**
-   * Reroutes LFO based on current destination + amount. Disconnects first
-   * (idempotent — safe to call repeatedly).
-   *
-   * Per-destination depth scaling: filter cutoff in Hz, pitch in cents,
-   * amp in linear gain. The "right" depth differs wildly between targets,
-   * so amount=1 means "max sensible swing" rather than a fixed unit.
-   */
   private routeLFO(): void {
     if (!this.lfo) return;
     this.lfo.disconnect();
@@ -170,23 +211,23 @@ class AudioEngine {
     switch (this.lfoDestination) {
       case "cutoff": {
         if (!this.filter) return;
-        const depth = 3000 * this.lfoAmount; // ±3 kHz max
+        const depth = 3000 * this.lfoAmount;
         this.lfo.min = -depth;
         this.lfo.max = depth;
         this.lfo.connect(this.filter.frequency);
         return;
       }
       case "pitch": {
-        if (!this.oscillator) return;
-        const depth = 100 * this.lfoAmount; // ±100 cents (1 semitone) max
+        const depth = 100 * this.lfoAmount;
         this.lfo.min = -depth;
         this.lfo.max = depth;
-        this.lfo.connect(this.oscillator.detune);
+        // Fan out to every voice oscillator's detune.
+        for (const v of this.voices) this.lfo.connect(v.oscillator.detune);
         return;
       }
       case "amp": {
         if (!this.masterGain) return;
-        const depth = 0.3 * this.lfoAmount; // ±0.3 gain max
+        const depth = 0.3 * this.lfoAmount;
         this.lfo.min = -depth;
         this.lfo.max = depth;
         this.lfo.connect(this.masterGain.gain);
@@ -198,43 +239,91 @@ class AudioEngine {
   // ── Note triggering ───────────────────────────────────────────
 
   noteOn(midi: number): void {
-    if (!this.envelope || !this.oscillator) return;
-    if (this.heldNotes.includes(midi)) return;
-
-    const wasEmpty = this.heldNotes.length === 0;
-    this.heldNotes.push(midi);
-    this.applyFrequency(midi);
-    if (wasEmpty) {
-      this.envelope.triggerAttack();
-    }
+    if (!this.started) return;
+    if (this.polyphony) this.noteOnPoly(midi);
+    else this.noteOnMono(midi);
   }
 
   noteOff(midi: number): void {
-    if (!this.envelope || !this.oscillator) return;
-    const idx = this.heldNotes.indexOf(midi);
-    if (idx === -1) return;
-    this.heldNotes.splice(idx, 1);
-
-    if (this.heldNotes.length === 0) {
-      this.envelope.triggerRelease();
-    } else {
-      this.applyFrequency(this.heldNotes[this.heldNotes.length - 1]);
-    }
+    if (!this.started) return;
+    if (this.polyphony) this.noteOffPoly(midi);
+    else this.noteOffMono(midi);
   }
 
   allNotesOff(): void {
     this.heldNotes = [];
-    this.envelope?.triggerRelease();
+    for (const v of this.voices) {
+      v.envelope.triggerRelease();
+      v.midi = -1;
+    }
+    this.noteToVoice.clear();
+    this.voiceOrder = [];
   }
 
-  // ── Internal ──────────────────────────────────────────────────
-
-  private applyFrequency(midi: number): void {
-    if (!this.oscillator) return;
-    this.oscillator.frequency.rampTo(
+  // MONO: legato + last-note priority. Only voice[0] is used.
+  private noteOnMono(midi: number): void {
+    if (this.heldNotes.includes(midi)) return;
+    const voice = this.voices[0];
+    if (!voice) return;
+    const wasEmpty = this.heldNotes.length === 0;
+    this.heldNotes.push(midi);
+    voice.oscillator.frequency.rampTo(
       midiToHz(midi + this.tuneSemitones),
       0.01,
     );
+    if (wasEmpty) {
+      voice.envelope.triggerAttack();
+      voice.midi = midi;
+    }
+  }
+
+  private noteOffMono(midi: number): void {
+    const idx = this.heldNotes.indexOf(midi);
+    if (idx === -1) return;
+    this.heldNotes.splice(idx, 1);
+    const voice = this.voices[0];
+    if (!voice) return;
+    if (this.heldNotes.length === 0) {
+      voice.envelope.triggerRelease();
+      voice.midi = -1;
+    } else {
+      const top = this.heldNotes[this.heldNotes.length - 1];
+      voice.oscillator.frequency.rampTo(
+        midiToHz(top + this.tuneSemitones),
+        0.01,
+      );
+    }
+  }
+
+  // POLY: each note gets its own voice. Steal oldest if pool exhausted.
+  private noteOnPoly(midi: number): void {
+    if (this.noteToVoice.has(midi)) return; // dedupe key repeat
+
+    let voice = this.voices.find((v) => v.midi === -1);
+    if (!voice) {
+      // Steal: oldest at front of voiceOrder.
+      voice = this.voiceOrder.shift();
+      if (!voice) return;
+      this.noteToVoice.delete(voice.midi);
+    }
+    voice.oscillator.frequency.rampTo(
+      midiToHz(midi + this.tuneSemitones),
+      0.005,
+    );
+    voice.midi = midi;
+    voice.envelope.triggerAttack();
+    this.noteToVoice.set(midi, voice);
+    this.voiceOrder.push(voice);
+  }
+
+  private noteOffPoly(midi: number): void {
+    const voice = this.noteToVoice.get(midi);
+    if (!voice) return;
+    voice.envelope.triggerRelease();
+    voice.midi = -1;
+    this.noteToVoice.delete(midi);
+    const idx = this.voiceOrder.indexOf(voice);
+    if (idx >= 0) this.voiceOrder.splice(idx, 1);
   }
 }
 

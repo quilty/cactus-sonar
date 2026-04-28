@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { engine } from "@/audio/engine";
+import { usePreset } from "@/state/preset";
 import { PowerButton } from "./PowerButton";
 import { Pet } from "./Pet";
 import { PresetBar } from "./PresetBar";
@@ -14,12 +15,19 @@ import { Keyboard } from "./Keyboard";
 
 export function Rack() {
   const [powered, setPowered] = useState(false);
+  const [poly, setPoly] = usePreset<boolean>("global.poly", false);
 
   const handlePower = async () => {
     if (powered) return;
     await engine.init();
     setPowered(true);
   };
+
+  // Sync polyphony to engine whenever the toggle or power state changes.
+  useEffect(() => {
+    if (!powered) return;
+    engine.setPolyphony(poly);
+  }, [poly, powered]);
 
   return (
     <div
@@ -42,7 +50,7 @@ export function Rack() {
           CACTUS·SONAR
         </h1>
         <p className="text-[10px] text-zinc-500 uppercase tracking-[0.3em] font-mono">
-          modular synthesis · v0.4
+          modular synthesis · v0.5
         </p>
       </header>
 
@@ -53,6 +61,7 @@ export function Rack() {
           <span className="text-[10px] uppercase tracking-[0.25em] text-zinc-500 font-mono">
             {powered ? "audio · live" : "audio · off"}
           </span>
+          <VoiceModeToggle poly={poly} onChange={setPoly} />
         </div>
       </div>
 
@@ -73,6 +82,54 @@ export function Rack() {
 
       <Keyboard powered={powered} />
     </div>
+  );
+}
+
+function VoiceModeToggle({
+  poly,
+  onChange,
+}: {
+  poly: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <div className="flex gap-1 text-[9px] uppercase tracking-[0.2em] font-mono">
+      <ModeButton selected={!poly} onClick={() => onChange(false)} label="mono" />
+      <ModeButton selected={poly} onClick={() => onChange(true)} label="poly" />
+    </div>
+  );
+}
+
+function ModeButton({
+  selected,
+  onClick,
+  label,
+}: {
+  selected: boolean;
+  onClick: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      aria-pressed={selected}
+      className="px-2 py-1 border rounded transition-colors"
+      style={
+        selected
+          ? {
+              borderColor: "#fbbf24",
+              background: "rgba(251,191,36,0.12)",
+              color: "#fbbf24",
+            }
+          : {
+              borderColor: "#3f3f46",
+              background: "#18121f",
+              color: "#a1a1aa",
+            }
+      }
+    >
+      {label}
+    </button>
   );
 }
 
