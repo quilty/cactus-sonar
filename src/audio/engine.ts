@@ -14,37 +14,60 @@ export const midiToHz = (midi: number): number =>
 const VOICE_COUNT = 8;
 
 /**
- * One polyphonic voice. Two oscillators each gain-staged before being summed
- * into a per-voice amplitude envelope. The envelope feeds into the shared
- * filter, then to the master output.
- *
- *   osc1 → gain1 ─┐
- *                 ├── envelope → (shared) filter → masterGain → destination
- *   osc2 → gain2 ─┘
+ * Per-voice drift factors. Spread evenly from -1..+1 across voices, with
+ * osc1/osc2 within a voice deliberately opposite. This gives mono mode
+ * (just voice 0) a real "two oscillators detuning apart" character when
+ * the drift knob is up, not just luck-of-the-draw.
  */
+function driftFactorsFor(index: number): [number, number] {
+  const half = (VOICE_COUNT - 1) / 2;
+  const f = (index - half) / half; // -1..+1
+  return [f, -f];
+}
+
 type Voice = {
   osc1: Tone.Oscillator;
   osc2: Tone.Oscillator;
   gain1: Tone.Gain;
   gain2: Tone.Gain;
   envelope: Tone.AmplitudeEnvelope;
+  /** Static drift factors per oscillator. Multiplied by global drift cents. */
+  driftFactor: [number, number];
   /** -1 = idle. Otherwise the MIDI note this voice is currently playing. */
   midi: number;
 };
 
+/**
+ * Audio engine.
+ *
+ * Signal chain:
+ *   voice(osc1+osc2 → env) → filter → delay → reverb → masterGain → destination
+ *                                                                ↓
+ *                                                          waveform tap
+ *
+ * LFO destinations:
+ *   cutoff → filter.frequency
+ *   amp    → masterGain.gain
+ *   pitch  → fanned out to every voice osc detune
+ */
 class AudioEngine {
   private filter: Tone.Filter | null = null;
+  private delay: Tone.FeedbackDelay | null = null;
+  private reverb: Tone.Reverb | null = null;
   private masterGain: Tone.Gain | null = null;
   private lfo: Tone.LFO | null = null;
   private waveform: Tone.Waveform | null = null;
   private voices: Voice[] = [];
   private started = false;
 
-  /** Per-oscillator tuning state, used when applying frequency to voices. */
-  private oscTune: [number, number] = [0, 0]; // semitones (float)
-  private oscDetune: [number, number] = [0, 0]; // cents (float)
+  /** Per-osc tuning state. */
+  private oscTune: [number, number] = [0, 0];
+  private oscDetune: [number, number] = [0, 0];
 
-  /** Mixer levels (0..1) for osc1 and osc2. */
+  /** Global drift in cents (multiplied by each voice's drift factors). */
+  private voiceDriftCents = 0;
+
+  /** Mixer levels (0..1). */
   private mixLevels: [number, number] = [1.0, 0.0];
 
   private lfoDestination: LFODestination = "off";
@@ -61,14 +84,30 @@ class AudioEngine {
 
     this.masterGain = new Tone.Gain(0.6).toDestination();
 
+    // Effects chain: filter → delay → reverb → master.
+    this.reverb = new Tone.Reverb({
+      decay: 2.5,
+      preDelay: 0.01,
+      wet: 0,
+    }).connect(this.masterGain);
+    // Async IR build; we don't await — wet defaults to 0 so it's inaudible
+    // during the brief generation window anyway.
+    this.reverb.generate();
+
+    this.delay = new Tone.FeedbackDelay({
+      delayTime: 0.3,
+      feedback: 0.35,
+      wet: 0,
+    }).connect(this.reverb);
+
     this.filter = new Tone.Filter({
       type: "lowpass",
       frequency: 2000,
       Q: 1,
-    }).connect(this.masterGain);
+    }).connect(this.delay);
 
     for (let i = 0; i < VOICE_COUNT; i++) {
-      this.voices.push(this.createVoice());
+      this.voices.push(this.createVoice(i));
     }
 
     this.lfo = new Tone.LFO({
@@ -84,7 +123,7 @@ class AudioEngine {
     this.started = true;
   }
 
-  private createVoice(): Voice {
+  private createVoice(index: number): Voice {
     const envelope = new Tone.AmplitudeEnvelope({
       attack: 0.005,
       decay: 0.2,
@@ -106,7 +145,15 @@ class AudioEngine {
     osc1.start();
     osc2.start();
 
-    return { osc1, osc2, gain1, gain2, envelope, midi: -1 };
+    return {
+      osc1,
+      osc2,
+      gain1,
+      gain2,
+      envelope,
+      driftFactor: driftFactorsFor(index),
+      midi: -1,
+    };
   }
 
   isStarted(): boolean {
@@ -129,7 +176,7 @@ class AudioEngine {
     return this.polyphony;
   }
 
-  // ── Per-oscillator controls (fan out to all voices) ───────────
+  // ── Per-oscillator controls ───────────────────────────────────
 
   setOscWaveform(idx: OscIndex, type: Waveform): void {
     for (const v of this.voices) {
@@ -139,7 +186,6 @@ class AudioEngine {
 
   setOscTune(idx: OscIndex, semitones: number): void {
     this.oscTune[idx] = semitones;
-    // Re-tune any voice that's currently sounding.
     if (this.polyphony) {
       for (const [midi, voice] of this.noteToVoice) {
         this.applyOscFrequency(voice, idx, midi);
@@ -152,10 +198,12 @@ class AudioEngine {
 
   setOscDetune(idx: OscIndex, cents: number): void {
     this.oscDetune[idx] = cents;
-    // detune.value is the static offset; LFO connections (when active) sum on top.
-    for (const v of this.voices) {
-      (idx === 0 ? v.osc1 : v.osc2).detune.value = cents;
-    }
+    for (const v of this.voices) this.updateDetuneForVoice(v);
+  }
+
+  setVoiceDrift(cents: number): void {
+    this.voiceDriftCents = cents;
+    for (const v of this.voices) this.updateDetuneForVoice(v);
   }
 
   // ── Mixer ─────────────────────────────────────────────────────
@@ -169,7 +217,7 @@ class AudioEngine {
     }
   }
 
-  // ── Filter (shared) ───────────────────────────────────────────
+  // ── Filter ────────────────────────────────────────────────────
 
   setFilterCutoff(hz: number): void {
     this.filter?.frequency.rampTo(hz, 0.04);
@@ -181,7 +229,7 @@ class AudioEngine {
     if (this.filter) this.filter.type = type;
   }
 
-  // ── Envelope (fans out to all voices) ─────────────────────────
+  // ── Envelope ──────────────────────────────────────────────────
 
   setAttack(seconds: number): void {
     for (const v of this.voices) v.envelope.attack = seconds;
@@ -237,7 +285,6 @@ class AudioEngine {
         const depth = 100 * this.lfoAmount;
         this.lfo.min = -depth;
         this.lfo.max = depth;
-        // Both oscillators of every voice — vibrato applies to whole voice.
         for (const v of this.voices) {
           this.lfo.connect(v.osc1.detune);
           this.lfo.connect(v.osc2.detune);
@@ -252,6 +299,36 @@ class AudioEngine {
         this.lfo.connect(this.masterGain.gain);
         return;
       }
+    }
+  }
+
+  // ── FX: Delay ─────────────────────────────────────────────────
+
+  setDelayTime(seconds: number): void {
+    this.delay?.delayTime.rampTo(seconds, 0.05);
+  }
+  setDelayFeedback(amount01: number): void {
+    if (this.delay) {
+      this.delay.feedback.value = Math.max(0, Math.min(0.95, amount01));
+    }
+  }
+  setDelayLevel(wet01: number): void {
+    if (this.delay) {
+      this.delay.wet.rampTo(Math.max(0, Math.min(1, wet01)), 0.05);
+    }
+  }
+
+  // ── FX: Reverb ────────────────────────────────────────────────
+
+  setReverbDecay(seconds: number): void {
+    if (this.reverb) {
+      // decay is a property; setting it triggers IR regeneration internally.
+      this.reverb.decay = seconds;
+    }
+  }
+  setReverbLevel(wet01: number): void {
+    if (this.reverb) {
+      this.reverb.wet.rampTo(Math.max(0, Math.min(1, wet01)), 0.05);
     }
   }
 
@@ -332,7 +409,7 @@ class AudioEngine {
     if (idx >= 0) this.voiceOrder.splice(idx, 1);
   }
 
-  // ── Internal frequency application ────────────────────────────
+  // ── Internal ──────────────────────────────────────────────────
 
   private applyVoiceFrequency(voice: Voice, midi: number): void {
     voice.osc1.frequency.rampTo(midiToHz(midi + this.oscTune[0]), 0.01);
@@ -346,6 +423,14 @@ class AudioEngine {
   ): void {
     const osc = idx === 0 ? voice.osc1 : voice.osc2;
     osc.frequency.rampTo(midiToHz(midi + this.oscTune[idx]), 0.01);
+  }
+
+  /** Recompute static detune (user detune + drift) for a voice. */
+  private updateDetuneForVoice(voice: Voice): void {
+    const drift0 = this.voiceDriftCents * voice.driftFactor[0];
+    const drift1 = this.voiceDriftCents * voice.driftFactor[1];
+    voice.osc1.detune.value = this.oscDetune[0] + drift0;
+    voice.osc2.detune.value = this.oscDetune[1] + drift1;
   }
 }
 

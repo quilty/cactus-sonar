@@ -12,6 +12,7 @@ import { Mixer } from "./modules/Mixer";
 import { Filter } from "./modules/Filter";
 import { Envelope } from "./modules/Envelope";
 import { LFO } from "./modules/LFO";
+import { FX } from "./modules/FX";
 import { Scope } from "./modules/Scope";
 import { Keyboard } from "./Keyboard";
 
@@ -89,6 +90,7 @@ export function Rack() {
             <Filter powered={powered} />
             <Envelope powered={powered} />
             <LFO powered={powered} />
+            <FX powered={powered} />
             <Scope powered={powered} />
           </RackFrame>
         </div>

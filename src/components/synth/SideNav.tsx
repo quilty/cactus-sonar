@@ -58,7 +58,7 @@ export function SideNav({ poly, onPolyChange }: Props) {
         }}
         aria-hidden={!open}
       >
-        <header className="px-4 py-4 border-b border-zinc-800 flex items-center justify-between">
+        <header className="relative px-4 py-4 border-b border-zinc-800 text-center">
           <h2
             className="font-pixel"
             style={{
@@ -72,7 +72,7 @@ export function SideNav({ poly, onPolyChange }: Props) {
           <button
             onClick={() => setOpen(false)}
             aria-label="Close menu"
-            className="text-zinc-400 hover:text-zinc-100 text-xl leading-none px-1"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-100 text-xl leading-none px-1"
           >
             ×
           </button>
