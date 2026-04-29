@@ -56,6 +56,10 @@ class AudioEngine {
   private reverb: Tone.Reverb | null = null;
   private masterGain: Tone.Gain | null = null;
   private lfo: Tone.LFO | null = null;
+  /** LFO scalers — one per destination. Gain controls modulation depth. */
+  private lfoToCutoff: Tone.Gain | null = null;
+  private lfoToPitch: Tone.Gain | null = null;
+  private lfoToAmp: Tone.Gain | null = null;
   private waveform: Tone.Waveform | null = null;
   private voices: Voice[] = [];
   private started = false;
@@ -110,12 +114,28 @@ class AudioEngine {
       this.voices.push(this.createVoice(i));
     }
 
+    // LFO routing topology — fixed at init, never reconnects at runtime.
+    // The LFO outputs ±1 (bipolar) and fans out to three scaling Gain nodes,
+    // each statically wired to its target AudioParam. Switching destinations
+    // just changes the scaler gains; no audio-graph mutation, no disconnect
+    // quirks, no clicks.
+    this.lfoToCutoff = new Tone.Gain(0).connect(this.filter.frequency);
+    this.lfoToAmp = new Tone.Gain(0).connect(this.masterGain.gain);
+    this.lfoToPitch = new Tone.Gain(0);
+    for (const v of this.voices) {
+      this.lfoToPitch.connect(v.osc1.detune);
+      this.lfoToPitch.connect(v.osc2.detune);
+    }
+
     this.lfo = new Tone.LFO({
       frequency: 1,
       type: "triangle",
-      min: 0,
-      max: 0,
+      min: -1,
+      max: 1,
     }).start();
+    this.lfo.connect(this.lfoToCutoff);
+    this.lfo.connect(this.lfoToPitch);
+    this.lfo.connect(this.lfoToAmp);
 
     this.waveform = new Tone.Waveform(1024);
     this.masterGain.connect(this.waveform);
@@ -263,67 +283,34 @@ class AudioEngine {
   }
 
   /**
-   * Targets the LFO is currently connected to. Tracked so we can disconnect
-   * each one explicitly in routeLFO() — Tone.LFO's bare `disconnect()` does
-   * not always cleanly remove AudioParam connections when rerouting across
-   * param types (gain vs. cents). Without explicit per-target disconnection
-   * the LFO keeps modulating the previous target with the new (huge) min/max
-   * range, which can drive masterGain.gain wildly negative and silence the
-   * output.
+   * Route the LFO by adjusting per-target send gains. The LFO itself stays
+   * permanently connected — every reroute is just gain ramps on three nodes,
+   * which is glitch-free and immune to Tone's disconnect quirks.
    */
-  private lfoTargets: Array<Parameters<Tone.LFO["connect"]>[0]> = [];
-
   private routeLFO(): void {
-    if (!this.lfo) return;
+    if (!this.lfoToCutoff || !this.lfoToPitch || !this.lfoToAmp) return;
 
-    // Disconnect from each previously-tracked target. Tone throws if the
-    // connection was somehow already dropped; we silently ignore.
-    for (const t of this.lfoTargets) {
-      try {
-        this.lfo.disconnect(t);
-      } catch {
-        /* already disconnected — fine */
+    let cutoff = 0;
+    let pitch = 0;
+    let amp = 0;
+
+    if (this.lfoDestination !== "off" && this.lfoAmount > 0) {
+      switch (this.lfoDestination) {
+        case "cutoff":
+          cutoff = 3000 * this.lfoAmount;
+          break;
+        case "pitch":
+          pitch = 100 * this.lfoAmount;
+          break;
+        case "amp":
+          amp = 0.3 * this.lfoAmount;
+          break;
       }
     }
-    this.lfoTargets = [];
 
-    if (this.lfoDestination === "off" || this.lfoAmount === 0) {
-      this.lfo.min = 0;
-      this.lfo.max = 0;
-      return;
-    }
-
-    switch (this.lfoDestination) {
-      case "cutoff": {
-        if (!this.filter) return;
-        const depth = 3000 * this.lfoAmount;
-        this.lfo.min = -depth;
-        this.lfo.max = depth;
-        this.lfo.connect(this.filter.frequency);
-        this.lfoTargets.push(this.filter.frequency);
-        return;
-      }
-      case "pitch": {
-        const depth = 100 * this.lfoAmount;
-        this.lfo.min = -depth;
-        this.lfo.max = depth;
-        for (const v of this.voices) {
-          this.lfo.connect(v.osc1.detune);
-          this.lfo.connect(v.osc2.detune);
-          this.lfoTargets.push(v.osc1.detune, v.osc2.detune);
-        }
-        return;
-      }
-      case "amp": {
-        if (!this.masterGain) return;
-        const depth = 0.3 * this.lfoAmount;
-        this.lfo.min = -depth;
-        this.lfo.max = depth;
-        this.lfo.connect(this.masterGain.gain);
-        this.lfoTargets.push(this.masterGain.gain);
-        return;
-      }
-    }
+    this.lfoToCutoff.gain.rampTo(cutoff, 0.02);
+    this.lfoToPitch.gain.rampTo(pitch, 0.02);
+    this.lfoToAmp.gain.rampTo(amp, 0.02);
   }
 
   // ── FX: Delay ─────────────────────────────────────────────────
