@@ -262,9 +262,30 @@ class AudioEngine {
     this.routeLFO();
   }
 
+  /**
+   * Targets the LFO is currently connected to. Tracked so we can disconnect
+   * each one explicitly in routeLFO() — Tone.LFO's bare `disconnect()` does
+   * not always cleanly remove AudioParam connections when rerouting across
+   * param types (gain vs. cents). Without explicit per-target disconnection
+   * the LFO keeps modulating the previous target with the new (huge) min/max
+   * range, which can drive masterGain.gain wildly negative and silence the
+   * output.
+   */
+  private lfoTargets: Array<Parameters<Tone.LFO["connect"]>[0]> = [];
+
   private routeLFO(): void {
     if (!this.lfo) return;
-    this.lfo.disconnect();
+
+    // Disconnect from each previously-tracked target. Tone throws if the
+    // connection was somehow already dropped; we silently ignore.
+    for (const t of this.lfoTargets) {
+      try {
+        this.lfo.disconnect(t);
+      } catch {
+        /* already disconnected — fine */
+      }
+    }
+    this.lfoTargets = [];
 
     if (this.lfoDestination === "off" || this.lfoAmount === 0) {
       this.lfo.min = 0;
@@ -279,6 +300,7 @@ class AudioEngine {
         this.lfo.min = -depth;
         this.lfo.max = depth;
         this.lfo.connect(this.filter.frequency);
+        this.lfoTargets.push(this.filter.frequency);
         return;
       }
       case "pitch": {
@@ -288,6 +310,7 @@ class AudioEngine {
         for (const v of this.voices) {
           this.lfo.connect(v.osc1.detune);
           this.lfo.connect(v.osc2.detune);
+          this.lfoTargets.push(v.osc1.detune, v.osc2.detune);
         }
         return;
       }
@@ -297,6 +320,7 @@ class AudioEngine {
         this.lfo.min = -depth;
         this.lfo.max = depth;
         this.lfo.connect(this.masterGain.gain);
+        this.lfoTargets.push(this.masterGain.gain);
         return;
       }
     }
