@@ -185,6 +185,35 @@ class AudioEngine {
     return this.waveform.getValue() as unknown as Float32Array;
   }
 
+  /**
+   * Game-show "wrong answer" buzzer. Self-contained — creates a throwaway
+   * synth that bypasses the patch chain and disposes itself. Independent of
+   * `started` state so it works whether or not the user has hit Power yet.
+   */
+  playErrorSound(): void {
+    try {
+      if (Tone.context.state !== "running") {
+        void Tone.start();
+      }
+      const synth = new Tone.PolySynth(Tone.Synth, {
+        oscillator: { type: "square" },
+        envelope: {
+          attack: 0.005,
+          decay: 0.05,
+          sustain: 0.55,
+          release: 0.1,
+        },
+      }).toDestination();
+      synth.volume.value = -8; // tame the square-wave bite
+      const now = Tone.now();
+      synth.triggerAttackRelease("D3", 0.12, now);
+      synth.triggerAttackRelease("Db3", 0.18, now + 0.13);
+      setTimeout(() => synth.dispose(), 800);
+    } catch {
+      /* error sound is non-critical; swallow */
+    }
+  }
+
   // ── Mode ──────────────────────────────────────────────────────
 
   setPolyphony(enabled: boolean): void {
