@@ -29,32 +29,3 @@ body {
   color: var(--foreground);
   font-family: var(--font-geist-sans), system-ui, sans-serif;
 }
-
-/* ── Move mode visuals ──────────────────────────────────────────── */
-
-@keyframes diag-stripes {
-  to {
-    background-position: 28px 28px;
-  }
-}
-
-.move-mode-bg {
-  background-image: repeating-linear-gradient(
-    -45deg,
-    rgba(251, 191, 36, 0.06) 0,
-    rgba(251, 191, 36, 0.06) 7px,
-    transparent 7px,
-    transparent 21px
-  );
-  animation: diag-stripes 1.2s linear infinite;
-}
-
-@keyframes pulse-ring {
-  0%,
-  100% {
-    box-shadow: 0 0 0 3px #fbbf24, 0 0 16px rgba(251, 191, 36, 0.6);
-  }
-  50% {
-    box-shadow: 0 0 0 3px #fbbf24, 0 0 28px rgba(251, 191, 36, 0.9);
-  }
-}
