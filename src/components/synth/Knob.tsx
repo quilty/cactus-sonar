@@ -37,6 +37,8 @@ export function Knob({
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
+      // Stop the event from reaching React Flow's drag listener.
+      e.stopPropagation();
       e.currentTarget.setPointerCapture(e.pointerId);
       dragRef.current = { startY: e.clientY, startValue: value };
       setDragging(true);
@@ -65,7 +67,7 @@ export function Knob({
   }, [onChange]);
 
   return (
-    <div className="flex flex-col items-center gap-1 select-none">
+    <div className="nodrag flex flex-col items-center gap-1 select-none">
       <div
         role="slider"
         aria-label={label}

@@ -62,7 +62,10 @@ export function Filter({ powered }: Props) {
         <div className="text-[9px] uppercase tracking-[0.2em] text-zinc-500 text-center">
           type
         </div>
-        <div className="grid grid-cols-3 gap-1">
+        <div
+          className="nodrag grid grid-cols-3 gap-1"
+          onPointerDown={(e) => e.stopPropagation()}
+        >
           {FILTER_TYPES.map((t) => (
             <button
               key={t}

@@ -59,7 +59,10 @@ export function LFO({ powered }: Props) {
         <div className="text-[9px] uppercase tracking-[0.2em] text-zinc-500 text-center">
           wave
         </div>
-        <div className="grid grid-cols-2 gap-1">
+        <div
+          className="nodrag grid grid-cols-2 gap-1"
+          onPointerDown={(e) => e.stopPropagation()}
+        >
           {WAVES.map((w) => (
             <button
               key={w}
@@ -89,7 +92,10 @@ export function LFO({ powered }: Props) {
         <div className="text-[9px] uppercase tracking-[0.2em] text-zinc-500 text-center">
           dest
         </div>
-        <div className="grid grid-cols-2 gap-1">
+        <div
+          className="nodrag grid grid-cols-2 gap-1"
+          onPointerDown={(e) => e.stopPropagation()}
+        >
           {DESTS.map((d) => (
             <button
               key={d}

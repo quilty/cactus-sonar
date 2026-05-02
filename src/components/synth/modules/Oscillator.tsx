@@ -72,7 +72,10 @@ export function Oscillator({
         <div className="text-[9px] uppercase tracking-[0.2em] text-zinc-500 text-center">
           wave
         </div>
-        <div className="grid grid-cols-2 gap-1">
+        <div
+          className="nodrag grid grid-cols-2 gap-1"
+          onPointerDown={(e) => e.stopPropagation()}
+        >
           {WAVEFORMS.map((w) => (
             <button
               key={w}

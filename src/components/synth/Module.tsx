@@ -26,7 +26,7 @@ export function Module({
 }: ModuleProps) {
   return (
     <section
-      className="relative shrink-0 rounded-md border bg-gradient-to-b from-[#1a1530] to-[#0e0a1c] shadow-lg shadow-black/60"
+      className="select-none relative shrink-0 rounded-md border bg-gradient-to-b from-[#1a1530] to-[#0e0a1c] shadow-lg shadow-black/60"
       style={{
         width: hp * HP_TO_PX,
         minHeight,
@@ -39,7 +39,7 @@ export function Module({
       <Screw className="bottom-1.5 left-1.5" />
       <Screw className="bottom-1.5 right-1.5" />
 
-      <header className="px-3 pt-5 pb-3 text-center">
+      <header className="module-drag-handle px-3 pt-5 pb-3 text-center cursor-grab">
         <h2
           className="font-pixel"
           style={{
@@ -60,6 +60,9 @@ export function Module({
         />
       </header>
 
+      {/* Whole module is draggable from any non-interactive surface. Knobs
+          and button grids carry `nodrag` directly so their own handlers fire
+          without React Flow stealing the gesture. */}
       <div className="px-3 pb-6 flex flex-col gap-4 items-center">
         {children}
       </div>
