@@ -20,6 +20,7 @@ import {
 } from "react";
 import { engine } from "@/audio/engine";
 import { usePreset } from "@/state/preset";
+import { ShiftModeContext } from "@/state/shiftMode";
 import { PowerButton } from "./PowerButton";
 import { Pet } from "./Pet";
 import { PresetBar } from "./PresetBar";
@@ -223,6 +224,15 @@ function RackFlow() {
     };
   }, []);
 
+  // Toggle body class so CSS can light up the drag handles when shift is held.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    document.body.classList.toggle("shift-mode", shiftHeld);
+    return () => {
+      document.body.classList.remove("shift-mode");
+    };
+  }, [shiftHeld]);
+
   // Restore saved positions on mount with format validation. Old HP-format
   // numbers (from before React Flow) are silently dropped.
   useEffect(() => {
@@ -276,6 +286,7 @@ function RackFlow() {
   };
 
   return (
+    <ShiftModeContext.Provider value={shiftHeld}>
     <div
       className="w-full relative"
       style={{
@@ -325,6 +336,7 @@ function RackFlow() {
         {shiftHeld ? "drag mode active" : "hold shift to drag modules"}
       </div>
     </div>
+    </ShiftModeContext.Provider>
   );
 }
 

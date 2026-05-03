@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useShiftMode } from "@/state/shiftMode";
 
 type ModuleProps = {
   /** Title engraved at the top of the panel. */
@@ -24,6 +25,7 @@ export function Module({
   accent = "var(--env-accent)",
   children,
 }: ModuleProps) {
+  const dragMode = useShiftMode();
   return (
     <section
       className="select-none relative shrink-0 rounded-md border bg-gradient-to-b from-[#1a1530] to-[#0e0a1c] shadow-lg shadow-black/60"
@@ -39,7 +41,18 @@ export function Module({
       <Screw className="bottom-1.5 left-1.5" />
       <Screw className="bottom-1.5 right-1.5" />
 
-      <header className="module-drag-handle px-3 pt-5 pb-3 text-center cursor-grab">
+      <header
+        className="module-drag-handle px-3 pt-5 pb-3 text-center cursor-grab"
+        style={{
+          backgroundColor: dragMode
+            ? "rgba(251, 146, 60, 0.28)"
+            : undefined,
+          boxShadow: dragMode
+            ? "inset 0 0 0 1px rgba(251, 146, 60, 0.85), 0 0 18px rgba(251, 146, 60, 0.7)"
+            : undefined,
+          transition: "background-color 0.15s ease, box-shadow 0.15s ease",
+        }}
+      >
         <h2
           className="font-pixel"
           style={{
