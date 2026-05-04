@@ -1,5 +1,5 @@
-import { Rack } from "@/components/synth/Rack";
+import { redirect } from "next/navigation";
 
 export default function Page() {
-  return <Rack />;
+  redirect("/analog");
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 
 type Props = {
   poly: boolean;
@@ -77,6 +78,17 @@ export function SideNav({ poly, onPolyChange }: Props) {
             ×
           </button>
         </header>
+
+        <Section title="Engine Selection" accent="#fbbf24">
+          <div className="flex flex-col gap-2 font-mono text-[10px] uppercase tracking-[0.15em]">
+            <Link href="/analog" className="block px-3 py-2 border border-zinc-700 rounded hover:border-[#fbbf24]/50 hover:bg-[#fbbf24]/10 transition-colors text-zinc-300">
+              Analog Synth
+            </Link>
+            <Link href="/modular" className="block px-3 py-2 border border-zinc-700 rounded hover:border-[#fbbf24]/50 hover:bg-[#fbbf24]/10 transition-colors text-zinc-300">
+              Modular Synth
+            </Link>
+          </div>
+        </Section>
 
         <Section title="Sound Options" accent="var(--vco-accent)">
           <Row label="Voice Mode">
