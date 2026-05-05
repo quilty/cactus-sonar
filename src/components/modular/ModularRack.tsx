@@ -14,13 +14,18 @@ import {
   Edge,
 } from "@xyflow/react";
 
-import { DummyVCO } from "./modules/DummyVCO";
-import { MasterOut } from "./modules/MasterOut";
+import { DummyVCO } from "@/components/modular/modules/DummyVCO";
+import { MasterOut } from "@/components/modular/modules/MasterOut";
 import { ShiftModeContext } from "@/state/shiftMode";
+import { CableEdge } from "@/components/modular/CableEdge";
 
 const nodeTypes = {
   vco: ({ data }: any) => <DummyVCO />,
   out: ({ data }: any) => <MasterOut />,
+};
+
+const edgeTypes = {
+  cable: CableEdge,
 };
 
 const initialNodes = [
@@ -30,18 +35,36 @@ const initialNodes = [
 
 const initialEdges: Edge[] = [];
 
+const CABLE_COLORS = [
+  "#ef4444", // Red
+  "#3b82f6", // Blue
+  "#10b981", // Green
+  "#f59e0b", // Amber
+  "#d946ef", // Fuchsia
+  "#0ea5e9", // Sky
+  "#a855f7", // Purple
+];
+let colorIndex = 0;
+
 export function ModularRack() {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
 
   const onConnect = useCallback(
     (params: Connection) => {
-      // Create a glowing, animated patch cable style
+      const color = CABLE_COLORS[colorIndex % CABLE_COLORS.length];
+      colorIndex++;
+
       const patchCableEdge = {
         ...params,
-        type: "smoothstep",
+        type: "cable",
         animated: true,
-        style: { stroke: "#a78bfa", strokeWidth: 3, filter: "drop-shadow(0 0 4px rgba(167, 139, 250, 0.8))" },
+        data: { color },
+        style: { 
+          stroke: color, 
+          strokeWidth: 3, 
+          filter: `drop-shadow(0 0 4px ${color}cc)` 
+        },
       };
       setEdges((eds) => addEdge(patchCableEdge, eds));
     },
@@ -111,6 +134,7 @@ export function ModularRack() {
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
             defaultViewport={{ x: 0, y: 0, zoom: 1 }}
             minZoom={0.25}
             maxZoom={2}

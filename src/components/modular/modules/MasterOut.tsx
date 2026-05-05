@@ -1,5 +1,5 @@
-import { Handle, Position } from "@xyflow/react";
-import { ModularNode } from "../ModularNode";
+import { Jack } from "@/components/modular/Jack";
+import { ModularNode } from "@/components/modular/ModularNode";
 
 export function MasterOut() {
   return (
@@ -14,33 +14,19 @@ export function MasterOut() {
 
         {/* Inputs */}
         <div className="flex gap-4 mt-auto pt-8">
-          <div className="relative flex flex-col items-center">
-            <span className="text-[8px] uppercase tracking-[0.1em] text-red-400 font-mono mb-2 absolute -top-5">L/MONO</span>
-            {/* React Flow Target Handle */}
-            <Handle
-              type="target"
-              position={Position.Top}
-              id="in-l"
-              className="!w-4 !h-4 !bg-red-400 !border-2 !border-zinc-950 -translate-y-2 opacity-0 hover:opacity-100 transition-opacity"
-            />
-            <div className="w-6 h-6 rounded-full border-2 border-red-400 bg-zinc-950 flex items-center justify-center">
-              <div className="w-3 h-3 rounded-full bg-zinc-800"></div>
-            </div>
-          </div>
+          <Jack
+            id="in-l"
+            type="target"
+            label="L/MONO"
+            defaultRingColor="#f87171"
+          />
           
-          <div className="relative flex flex-col items-center">
-            <span className="text-[8px] uppercase tracking-[0.1em] text-red-400 font-mono mb-2 absolute -top-5">R</span>
-            {/* React Flow Target Handle */}
-            <Handle
-              type="target"
-              position={Position.Top}
-              id="in-r"
-              className="!w-4 !h-4 !bg-red-400 !border-2 !border-zinc-950 -translate-y-2 opacity-0 hover:opacity-100 transition-opacity"
-            />
-            <div className="w-6 h-6 rounded-full border-2 border-red-400 bg-zinc-950 flex items-center justify-center">
-              <div className="w-3 h-3 rounded-full bg-zinc-800"></div>
-            </div>
-          </div>
+          <Jack
+            id="in-r"
+            type="target"
+            label="R"
+            defaultRingColor="#f87171"
+          />
         </div>
       </div>
     </ModularNode>
