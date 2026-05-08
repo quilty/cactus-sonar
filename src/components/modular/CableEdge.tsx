@@ -19,6 +19,6 @@ export function CableEdge({
   const path = `M ${sourceX},${sourceY} C ${sourceX},${sourceY + droop} ${targetX},${targetY + droop} ${targetX},${targetY}`;
 
   return (
-    <BaseEdge path={path} style={style} />
+    <BaseEdge path={path} style={style} interactionWidth={0} />
   );
 }

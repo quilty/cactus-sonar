@@ -17,6 +17,7 @@ import {
 import { DummyVCO } from "@/components/modular/modules/DummyVCO";
 import { MasterOut } from "@/components/modular/modules/MasterOut";
 import { ShiftModeContext } from "@/state/shiftMode";
+import { DisconnectModeContext } from "@/state/disconnectMode";
 import { CableEdge } from "@/components/modular/CableEdge";
 
 const nodeTypes = {
@@ -36,13 +37,13 @@ const initialNodes = [
 const initialEdges: Edge[] = [];
 
 const CABLE_COLORS = [
-  "#ef4444", // Red
   "#3b82f6", // Blue
   "#10b981", // Green
   "#f59e0b", // Amber
   "#d946ef", // Fuchsia
   "#0ea5e9", // Sky
   "#a855f7", // Purple
+  "#ef4444", // Red
 ];
 let colorIndex = 0;
 
@@ -72,25 +73,52 @@ export function ModularRack() {
   );
 
   const [shiftHeld, setShiftHeld] = useState(false);
+  const [metaHeld, setMetaHeld] = useState(false);
+  const [zHeld, setZHeld] = useState(false);
+  
+  const cmdZHeld = metaHeld && zHeld;
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (isTypingTarget(e.target)) return;
       if (e.key === "Shift") setShiftHeld(true);
+      if (e.key === "Meta") setMetaHeld(true);
+      if (e.key.toLowerCase() === "z") {
+        setZHeld(true);
+        if (e.metaKey || metaHeld) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      }
     };
     const onKeyUp = (e: KeyboardEvent) => {
       if (e.key === "Shift") setShiftHeld(false);
+      if (e.key === "Meta") {
+        setMetaHeld(false);
+        setZHeld(false); // Prevent Z from getting stuck if keyup is lost
+      }
+      if (e.key.toLowerCase() === "z") {
+        setZHeld(false);
+        if (e.metaKey || metaHeld) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      }
     };
-    const onBlur = () => setShiftHeld(false);
-    window.addEventListener("keydown", onKeyDown);
-    window.addEventListener("keyup", onKeyUp);
+    const onBlur = () => {
+      setShiftHeld(false);
+      setMetaHeld(false);
+      setZHeld(false);
+    };
+    window.addEventListener("keydown", onKeyDown, { capture: true });
+    window.addEventListener("keyup", onKeyUp, { capture: true });
     window.addEventListener("blur", onBlur);
     return () => {
-      window.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("keydown", onKeyDown, { capture: true });
+      window.removeEventListener("keyup", onKeyUp, { capture: true });
       window.removeEventListener("blur", onBlur);
     };
-  }, []);
+  }, [metaHeld]);
 
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -101,6 +129,7 @@ export function ModularRack() {
   }, [shiftHeld]);
 
   return (
+    <DisconnectModeContext.Provider value={cmdZHeld}>
     <ShiftModeContext.Provider value={shiftHeld}>
     <div
       className="w-full h-full relative min-h-screen flex flex-col items-center"
@@ -141,6 +170,7 @@ export function ModularRack() {
             nodesConnectable={true}
             nodesDraggable={shiftHeld}
             elementsSelectable={false}
+            disableKeyboardA11y={true}
             panOnDrag={false}
             fitView
             proOptions={{ hideAttribution: true }}
@@ -159,30 +189,36 @@ export function ModularRack() {
           stroke-width: 3;
           filter: drop-shadow(0 0 6px rgba(251, 191, 36, 0.8));
         }
-        /* Make handles invisible by default and take up space over the custom jacks, hover to show */
-        .synth-flow .react-flow__handle {
-          width: 24px;
-          height: 24px;
-          border-radius: 50%;
-          background: transparent;
-          border: none;
+        /* Disable edge pointer events so they don't block clicking the Jacks underneath */
+        .synth-flow .react-flow__edges, .synth-flow .react-flow__edge {
+          pointer-events: none !important;
         }
       `}} />
       
       <div
-        className="absolute top-3 right-4 pointer-events-none text-[10px] uppercase tracking-[0.25em] font-mono select-none z-50"
+        className="absolute top-3 right-4 pointer-events-none text-[10px] uppercase tracking-[0.25em] font-mono select-none z-50 flex flex-col items-end gap-1"
         style={{
-          color: shiftHeld ? "#fbbf24" : "#52525b",
-          opacity: shiftHeld ? 1 : 0.6,
-          textShadow: shiftHeld
-            ? "0 0 8px rgba(251, 191, 36, 0.6)"
-            : undefined,
+          color: "#52525b",
         }}
       >
-        {shiftHeld ? "drag mode active" : "hold shift to drag modules"}
+        <div style={{
+          color: shiftHeld ? "#fbbf24" : "inherit",
+          opacity: shiftHeld ? 1 : 0.6,
+          textShadow: shiftHeld ? "0 0 8px rgba(251, 191, 36, 0.6)" : undefined,
+        }}>
+          {shiftHeld ? "drag mode active" : "hold shift to drag modules"}
+        </div>
+        <div style={{
+          color: cmdZHeld ? "#ff003c" : "inherit",
+          opacity: cmdZHeld ? 1 : 0.6,
+          textShadow: cmdZHeld ? "0 0 8px rgba(255, 0, 60, 0.6)" : undefined,
+        }}>
+          {cmdZHeld ? "disconnect mode active" : "hold cmd+z to disconnect cables"}
+        </div>
       </div>
     </div>
     </ShiftModeContext.Provider>
+    </DisconnectModeContext.Provider>
   );
 }
 
